@@ -1,0 +1,28 @@
+{"producer":{"name":"Blender","version":"2.90.0","exporter_version":"6.4.4","file":"cube.babylon"},
+"autoClear":true,"clearColor":[0.0509,0.0509,0.0509],"gravity":[0,-9.81,0],
+"materials":[{"name":"classic_animation_02.BJS-3D-logo_light.000","id":"classic_animation_02.BJS-3D-logo_light.000","ambient":[1,1,1],"diffuse":[1,1,1],"specular":[1,1,1],"emissive":[0,0,0],"specularPower":15,"alpha":1,"backFaceCulling":true,"checkReadyOnlyOnce":false,"maxSimultaneousLights":4}],
+"multiMaterials":[],
+"skeletons":[],
+"meshes":[{"name":"static-objects","id":"static-objects","position":[0,0,0],"rotation":[0,0,0],"scaling":[1,1,1],"isVisible":false,"isEnabled":true,"checkCollisions":false,"billboardMode":0,"receiveShadows":false,"tags":""},{"name":"Cube","id":"Cube","materialId":"classic_animation_02.BJS-3D-logo_light.000","billboardMode":0,"position":[0,0,0],"rotation":[0,0,0],"scaling":[1,1,1],"isVisible":true,"freezeWorldMatrix":false,"isEnabled":true,"checkCollisions":false,"receiveShadows":false,"pickable":true,"tags":""
+,"positions":[-1,1,1,1,1,-1,1,1,1,1,1,-1,-1,-1,-1,1,-1,-1,-1,1,-1,-1,-1,1,-1,-1,-1,1,-1,1,-1,-1,-1,-1,-1,1,1,1,1,1,-1,-1,1,-1,1,-1,1,1,1,-1,1
+,-1,-1,1,-1,1,-1,1,1,-1,-1,1,-1,-1,1,1,1,-1,-1,-1,-1,-1,1,1,1,1,1,-1,1,-1,-1,-1,1,1,1,1,1,1,-1,1]
+,"normals":[0,1,0,0,1,0,0,1,0,0,0,-1,0,0,-1,0,0,-1,-1,0,0,-1,0,0,-1,0,0,0,-1,0,0,-1,0,0,-1,0,1,0,0,1,0,0,1,0,0,0,0,1,0,0,1
+,0,0,1,0,1,0,0,0,-1,0,0,-1,-1,0,0,0,-1,0,0,-1,0,1,0,0,1,0,0,1,0,0,0,0,1,0,0,1,0,0,1]
+,"uvs":[0.875,0.5,0.625,0.75,0.625,0.5,0.625,0.75,0.375,1,0.375,0.75,0.625,0,0.375,0.25,0.375,0,0.375,0.5,0.125,0.75,0.125,0.5,0.625,0.5,0.375,0.75,0.375,0.5,0.625,0.25,0.375,0.5,0.375,0.25,0.875,0.75,0.625,0.75,0.625,1,0.625,0.25,0.375,0.75,0.125,0.75,0.625,0.5
+,0.625,0.75,0.375,0.75,0.625,0.25,0.625,0.5,0.375,0.5]
+,"indices":[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,0,18,1,19,20,4,6,21,7,9,22,23,24,25,26,27,28,29]
+,"subMeshes":[{"materialIndex":0,"verticesStart":0,"verticesCount":30,"indexStart":0,"indexCount":36}]
+,"animations":[{"dataType":1,"framePerSecond":24,"keys":[
+{"frame":1,"values":[0,0,0]},
+{"frame":20,"values":[5.5633,-0.2684,0.4536]}],"loopBehavior":1,"name":"rotation animation","property":"rotation"},{"dataType":1,"framePerSecond":24,"keys":[
+{"frame":1,"values":[0,0,0]},
+{"frame":20,"values":[3.341,-1.5486,5.6556]}],"loopBehavior":1,"name":"position animation","property":"position"},{"dataType":1,"framePerSecond":24,"keys":[
+{"frame":1,"values":[1,1,1]},
+{"frame":20,"values":[-3.0617,-3.0617,-3.0617]}],"loopBehavior":1,"name":"scaling animation","property":"scaling"}],"ranges":[{"name":"cubeAction","from":0,"to":20}],"autoAnimate":true,"autoAnimateFrom":1,"autoAnimateTo":20,"autoAnimateLoop":true
+,"instances":[]}
+],
+"morphTargetManagers":[],
+"cameras":[],
+"lights":[],
+"shadowGenerators":[]
+}

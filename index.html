@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="description" content="Gravity" />
+
+        <title>Gravity</title>
+
+        <link rel="icon" type="image/png" href="/gravity/logo.png">
+        <link rel="stylesheet" type="text/css" href="/cdn/css/help.css">
+        <link rel="stylesheet" type="text/css" href="/gravity/css/gravity.css">
+
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+		<script src="https://cdn.babylonjs.com/babylon.js"></script>
+        <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+		<script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.js"></script>
+		<script src="https://code.jquery.com/pep/0.4.1/pep.js"></script>
+		<script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+    </head>
+    <body>
+        <div id="univers_div">
+            <canvas id="renderCanvas" touch-action="none"></canvas>
+        </div>
+        <div id="dialogContainer"></div>
+    </body>
+</html>
+
+<script>
+    var meshes = [];
+    var current_X = 0; var current_Y = 0;
+    var mousePressX = 0; var mousePressY = 0;
+    var num_mesh = 0;
+    var n = 0; var sens = "u";
+    var y1 = 1; var y2 = 10;
+</script>
+<script src="/gravity/js/gui.js"></script>
+<script src="/gravity/js/game.js"></script>
+<script src="/gravity/js/player.js"></script>
+<script src="/gravity/js/arena.js"></script>
+
+<script src="/cdn/js/help.js"></script>
+
+<script>
+    var g = new Game('renderCanvas');
+</script>
+
+<script src="/gravity/js/gravity_engine.js"></script>
+<script src="/gravity/js/events.js"></script>
