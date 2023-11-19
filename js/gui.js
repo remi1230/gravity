@@ -8,12 +8,7 @@ function add_gui_controls(sc){
   add_raz_button(sc);
   addButtonsShowSwitchHelp(sc);
 
-  /*add_button(sc);
-  add_switch_gui_button(sc);
-  add_help_gui_button(sc);*/
-
   add_masse_slider(sc);
-  //add_cohesion_slider(sc);
   add_var_taille_slider(sc);
   add_colors_radios(sc);
   add_save_state_button(sc);
@@ -71,6 +66,16 @@ function add_gui_controls_suit(sc){
   param_controls_suit(sc);
 }
 
+function designButton(button){
+  button.width        = 0.3;
+  button.paddingRight = '10px';
+  button.height       = "35px";
+  button.color        = "white";
+  button.cornerRadius = 10;
+  button.background   = "green";
+  button.fontSize     = "15%";
+}
+
 function addButtonsShowSwitchHelp(sc){
   //*********PANEL*********//
   glo.advancedTextureButton = BABYLON.GUI.AdvancedDynamicTexture.CreateFullscreenUI("UI", true, sc);
@@ -86,16 +91,6 @@ function addButtonsShowSwitchHelp(sc){
   panel.verticalAlignment   = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_BOTTOM;
 
   glo.advancedTextureButton.addControl(panel);
-
-  function designButton(button){
-    button.width        = 0.3;
-    button.paddingRight = '10px';
-    button.height       = "35px";
-    button.color        = "white";
-    button.cornerRadius = 10;
-    button.background   = "green";
-    button.fontSize     = "15%";
-  }
 
   //*********SHOW*********//
   var button = BABYLON.GUI.Button.CreateSimpleButton("showButton", "Show/Hide");
@@ -160,67 +155,47 @@ function add_raz_button(sc){
 
   glo.advancedTexture.addControl(panel);
 
-  var button1 = BABYLON.GUI.Button.CreateSimpleButton("but_raz", "RAZ");
-    button1.width = 0.4;
-    button1.height = "40px";
-    button1.onPointerUpObservable.add(function() {
-      raz_meshes();
-      meshesList = false;
-    });
-    panel.addControl(button1);
+  var button = BABYLON.GUI.Button.CreateSimpleButton("but_raz", "RAZ");
+  designButton(button);
+  button.onPointerUpObservable.add(function() {
+    raz_meshes();
+    meshesList = false;
+  });
+  panel.addControl(button);
 
-    glo.buttons.push(button1);
-    glo.panels_buttons.push(panel);
+  //glo.buttons.push(button1);
+  glo.panels_buttons.push(panel);
 }
 function add_save_state_button(sc){
-  var panel = new BABYLON.GUI.StackPanel();
-  /*panel.width = "220px";
-  panel.top = "-7%";
-  panel.left = "-7%";
-  panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
-  panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_BOTTOM;*/
+  var panel  = new BABYLON.GUI.StackPanel();
+  panel.left = "0.5%";
 
   glo.advancedTexture.addControl(panel);
 
-  var button1 = BABYLON.GUI.Button.CreateSimpleButton("but_save_state", "SAVE");
-    button1.width = 0.3;
-    button1.height = "30px";
-    button1.color = "white";
-    button1.cornerRadius = 10;
-    button1.background = "green";
-    button1.fontSize = "12px";
-    button1.onPointerUpObservable.add(function() {
-      save_meshes();
-    });
-    panel.addControl(button1);
+  var button = BABYLON.GUI.Button.CreateSimpleButton("but_save_state", "SAVE");
+  designButton(button);
 
-    //glo.buttons.push(button1);
-    glo.panels_left.push(panel);
+  button.onPointerUpObservable.add(function() {
+    save_meshes();
+  });
+  panel.addControl(button);
+
+  glo.panels_left.push(panel);
 }
 function add_restore_state_button(sc){
-  var panel = new BABYLON.GUI.StackPanel();
-  /*panel.width = "220px";
-  panel.top = "-7%";
-  panel.left = "0%";
-  panel.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_RIGHT;
-  panel.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_BOTTOM;*/
+  var panel  = new BABYLON.GUI.StackPanel();
+  panel.left = "0.5%";
 
   glo.advancedTexture.addControl(panel);
 
-  var button1 = BABYLON.GUI.Button.CreateSimpleButton("but_restore_state", "RESTORE");
-    button1.width = 0.3;
-    button1.height = "30px";
-    button1.color = "white";
-    button1.cornerRadius = 10;
-    button1.background = "green";
-    button1.fontSize = "12px";
-    button1.onPointerUpObservable.add(function() {
-      restore_meshes();
-    });
-    panel.addControl(button1);
+  var button = BABYLON.GUI.Button.CreateSimpleButton("but_restore_state", "RESTORE");
+  designButton(button);
+  button.onPointerUpObservable.add(function() {
+    restore_meshes();
+  });
+  panel.addControl(button);
 
-    //glo.buttons.push(button1);
-    glo.panels_left.push(panel);
+  glo.panels_left.push(panel);
 }
 
 function add_text(text, align_h, align_v, left, padding_left, width, height, top, gui = glo.gui_type_select){
@@ -1198,10 +1173,6 @@ function param_controls(sc){
     pr.width = '20%';
     pr.top = pr_top + '%';
     pr_top += 8;
-    if(pr.name && (pr.name == "param" || pr.name == "type")){
-      pr.width      = '10%';
-      pr.background = 'red';
-    }
   });
   glo.sliders_left.map(sr => {
     sr.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
@@ -1363,7 +1334,11 @@ function mergeAllGuiElemsArrays(){
   ];
 }
 
-
+function getGuiElemByName(name){
+  for(let i = 0; i < glo.guiElems.length; i++){ 
+    if(glo.guiElems[i].name === name){ return glo.guiElems[i]; } 
+  }
+}
 
 
 

@@ -13,6 +13,8 @@ $("#univers_div").mouseleave(function(){
 
 
 window.addEventListener("keydown", function (e) {
+	help.saveObjParent();
+
 	switch (e.key) {
 		/// ! -- Affiche ou cache les axes -- interface, axes -- showAxis ///
 		case "!":
@@ -122,7 +124,7 @@ window.addEventListener("keydown", function (e) {
 			glo.echelle /= 10;
 
 			break;
-		/// s -- Les trainées des boules conservent ou non leur couleur -- boule, couleur, trainées ///
+		/// s -- Les trainées des boules conservent ou non leur couleur -- boule, couleur, trainée ///
 		case "s":
 			glo.trail.color = !glo.trail.color;
 
@@ -180,22 +182,24 @@ window.addEventListener("keydown", function (e) {
 
 			break;
 		case 'ArrowLeft':
-			move_mesh(meshes, 'left', dist);
+			move_mesh(meshes, 'left', glo.moveDistMeshesByKey);
 
 		break;
 		case 'ArrowRight':
-			move_mesh(meshes, 'right', dist);
+			move_mesh(meshes, 'right', glo.moveDistMeshesByKey);
 
 			break;
 		case 'ArrowDown':
-			move_mesh(meshes, 'bottom', dist);
+			move_mesh(meshes, 'up', glo.moveDistMeshesByKey);
 
 			break;
 		case 'ArrowUp':
-			move_mesh(meshes, 'up', dist);
+			move_mesh(meshes, 'bottom', glo.moveDistMeshesByKey);
 
 			break;
 	}
+
+	help.tuchOnAfterPropUpdate();
 });
 
 
@@ -236,21 +240,21 @@ function* selectNextMeshGen(){
 }
 let meshesList = false;
 
-function goToMeanMeshesPos(){
-	const pos = calculMeshesMeanPos();
+function goToMeanMeshesPos(theMeshes = meshes){
+	const pos = calculMeshesMeanPos(theMeshes);
 
 	glo.camera.setTarget(new BABYLON.Vector3(pos.x, pos.y, pos.z));
 	glo.camera.setPosition(new BABYLON.Vector3(pos.x, pos.y, pos.z - 12));
 }
 
-function calculMeshesMeanPos(){
+function calculMeshesMeanPos(theMeshes = meshes){
 	let pos = {x: 0, y: 0, z: 0};
-	meshes.forEach(mesh => {
+	theMeshes.forEach(mesh => {
 		pos.x += mesh.position.x; pos.y += mesh.position.y; pos.z += mesh.position.z;
 	});
-	pos.x /= meshes.length; pos.y /= meshes.length; pos.z /= meshes.length;
+	pos.x /= theMeshes.length; pos.y /= theMeshes.length; pos.z /= theMeshes.length;
 
-	return meshes.length ? pos : {x: 0, y: 0, z: 0};
+	return theMeshes.length ? pos : {x: 0, y: 0, z: 0};
 }
 
 function move_mesh(ms, direction, distance){
@@ -1714,9 +1718,11 @@ function add_pyramide_of_meshes(nb_meshes, taille_mesh, taille, masse, pos){
 	var y = glo.camera.getFrontPosition(glo.cam_dist).y;
 	var z = glo.camera.getFrontPosition(glo.cam_dist).z;
 	translate_meshes(meshes_to_return, -x, -y, -z);
-	rotate_meshes(meshes_to_return, 45, 0, 0);
-	rotate_meshes(meshes_to_return, 0, -120, 0);
+	//rotate_meshes(meshes_to_return, 45, 0, 0);
+	rotate_meshes(meshes_to_return, 0, -90, 0);
 	translate_meshes(meshes_to_return, x, y, z);
+
+	goToMeanMeshesPos(meshes_to_return);
 
 	return meshes_to_return;
 }

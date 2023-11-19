@@ -119,7 +119,7 @@ var glo = {
 			formule_pair: "n*(n/2 - 1) + 2", formule_impair: "n*arrondi_entier_inferieur(n/2) + 2"},
 			{text: "Cercle", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false, },
 			{text: "Cercles", pow_nb_particules: 1, selected: false, mult_nb_particules: 6, check: false, },
-			/*{text: "Pyramide", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false,
+			{text: "Pyramide", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false,
 				formule: function(n){
 					var n_particules_to_return = 0;
 					for(var i = n; n > 0; n-=2){
@@ -128,7 +128,7 @@ var glo = {
 
 					return n_particules_to_return;
 				},
-			},*/
+			},
 			{text: "Spirale", pow_nb_particules: 1, selected: false, mult_nb_particules: 6, check: false, },
 			{text: "Spirale 3D", pow_nb_particules: 1, selected: false, mult_nb_particules: 6, check: false, },
 			//{text: "Coquillage", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false, },
@@ -213,6 +213,7 @@ var glo = {
 	},
 	temps: 1,
 	scale: 0,
+	moveDistMeshesByKey : 0.178,
 	camera_start_alpha: Math.PI * 1.5,
 	camera_start_beta: Math.PI * 1.5,
 	form_select: "Cube",
