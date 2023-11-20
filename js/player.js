@@ -132,7 +132,8 @@ var glo = {
 			{text: "Spirale", pow_nb_particules: 1, selected: false, mult_nb_particules: 6, check: false, },
 			{text: "Spirale 3D", pow_nb_particules: 1, selected: false, mult_nb_particules: 6, check: false, },
 			//{text: "Coquillage", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false, },
-			//{text: "ToreSpi", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false, },
+			{text: "CircleCircles", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false, },
+			{text: "Tore", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false, },
 			//{text: "Vortex", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false, },
 			//{text: "SpiBoat", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false, },
 			{text: "Test", pow_nb_particules: 1, selected: false, mult_nb_particules: 1, check: false, },
@@ -465,25 +466,409 @@ Player.prototype = {
   }
 }
   
-/*Player.prototype = {
-  _initCamera : function(scene, canvas) {
+const toreRots = [
+	{
+	  "x1": 0,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 0,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 0
+	},
+	{
+	  "x1": 0,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 0,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 0,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 0
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 0
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 0,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 0,
+	  "x2": 0,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 0,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 0,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 0,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 0,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 0,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 0,
+	  "y2": 1,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 0,
+	  "z2": 1
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 0
+	},
+	{
+	  "x1": 1,
+	  "y1": 1,
+	  "z1": 1,
+	  "x2": 1,
+	  "y2": 1,
+	  "z2": 1
+	}
+  ];
 
-		this.camera = new BABYLON.ArcRotateCamera(
-	    "Camera",
-	    Math.PI / 2,
-	    Math.PI / 2,
-	    -glo.cam_pose,
-	    new BABYLON.Vector3.Zero(),
-	    scene
-  	);
-
-    this.camera.attachControl(canvas, true);
-	this.camera.inputs.attached.keyboard.detachControl();
-	glo.camera = this.camera;
-	glo.camera_start_orientation = {
-		alpha: glo.camera.alpha,
-		beta: glo.camera.beta,
-	};
-	glo.camera_target = this.camera.getTarget();
+  function* getToreRotsGen(){
+	var index = -1;
+	var tab   = toreRots;
+	while(true){
+		  index++;
+		  if(index == tab.length){ index = 0; }
+	  yield tab[index];
+	}
   }
-};*/
+
+getToreRots = getToreRotsGen();

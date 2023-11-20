@@ -16,6 +16,11 @@ window.addEventListener("keydown", function (e) {
 	help.saveObjParent();
 
 	switch (e.key) {
+		/// b -- Inverse les vitesses de pose -- boule, pose ///
+		case "b":
+			invSpeedSliders();
+
+			break;
 		/// ! -- Affiche ou cache les axes -- interface, axes -- showAxis ///
 		case "!":
 			glo.mode.showAxis = !glo.mode.showAxis;
@@ -432,18 +437,26 @@ function add_meshes(nb_meshes, taille_mesh, taille, masse, pos = {x: 0, y: 0, z:
 		case "Coquillage":
 			add_spicube_of_meshes(nb_meshes, taille_mesh, taille, masse, pos);
 			break;
-		case "ToreSpi":
-			var options = {
-				rot_1: "y",
-				rot_2: "x",
-				div_rot_1:{x: 1, y: 1, z: 1},
-				div_rot_2:{x: 1, y: 1, z: 0.9},
-				angle_1:{from: -90, to: 270},
-				angle_2:{from: 0, to: 360},
+		case "CircleCircles":
+			add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos);
+			break;
+		case "Tore":
+			//let rots = getToreRots.next().value; console.log(rots);
+			//add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rots);
+
+			let rots = {
+				x1: 0,
+				y1: 0,
+				z1: 1,
+				x2: 0,
+				y2: 1,
+				z2: 0,
+				x3: 0,
+				y3: 0,
+				z3: 1,
 			};
-			var ms = add_dbl_rot_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, options);
-			//rotate_meshes(ms, 45, 0, 0);
-			//rotate_meshes(ms, 0, -22.5, 0);
+
+			add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rots);
 			break;
 		case "Vortex":
 			var options = {
@@ -483,6 +496,20 @@ function add_meshes(nb_meshes, taille_mesh, taille, masse, pos = {x: 0, y: 0, z:
 }
 
 function selectNextMesh(){ return meshesList ? meshesList.next().value : false; }
+
+function invSpeedSliders(){
+	glo.vitesse_pose_x = -glo.vitesse_pose_x;
+	glo.vitesse_pose_y = -glo.vitesse_pose_y;
+	glo.vitesse_pose_z = -glo.vitesse_pose_z;
+
+	let vxSlider = getGuiElemByName('vitesse_x');
+	let vySlider = getGuiElemByName('vitesse_y');
+	let vzSlider = getGuiElemByName('vitesse_z');
+
+	vxSlider.value = -vxSlider.value;
+	vySlider.value = -vySlider.value;
+	vzSlider.value = -vzSlider.value;
+}
 
 function add_one_mesh(taille_mesh, taille, masse, pos,
 	vitesse = {x: glo.vitesse_pose_x, y: glo.vitesse_pose_y, z: glo.vitesse_pose_z}){
@@ -1242,6 +1269,63 @@ function add_cercle_of_meshes_z(nb_meshes, taille_mesh, taille, masse, pos){
 
 	return meshes_to_return;
 }
+function add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rots = {
+	x1: 0,
+	y1: 0,
+	z1: 1,
+	x2: 0,
+	y2: 1,
+	z2: 0,
+	x3: 0,
+	y3: 0,
+	z3: 1,
+}){
+	pos = {x: 1, y: 6 * glo.ecart_particules, z: 1};
+	var meshes_to_return = [];
+	var centerCircles    = [];
+
+	var sup_i = 360 / nb_meshes;
+	var k = 0;
+	for(var i = 0; i < 360; i+=sup_i){
+		k++;
+		if(k <= nb_meshes){
+			centerCircles.push(rotate(pos, i * rots.x1, i * rots.y1, i * rots.z1));
+		}
+	}
+
+	let n = 0;
+	centerCircles.forEach(centerPos => {
+		k = 0;
+		let posToRotate = {x: centerPos.x + 0, y: centerPos.y + PI, z: centerPos.z + 0	};
+		for(var i = 0; i < 360; i+=sup_i){
+			k++;
+			if(k <= nb_meshes){
+				let pos_mesh = rotateAroundPoint(posToRotate, i * rots.x2, i * rots.y2, i * rots.z2, centerPos);
+				pos_mesh     = rotateAroundPoint(pos_mesh, n * rots.x3, n * rots.y3, n * rots.z3, centerPos);
+				if(!same_pos_to_one_meshes(meshes_to_return, pos_mesh)){ meshes_to_return.push(add_one_mesh(taille_mesh, taille, masse, pos_mesh)); }
+			}
+		}
+		n += sup_i;
+	});
+
+
+	if(glo.mode_check.getCheck('meta_mesh')){ glo.id_meta_mesh++; }
+
+	/*var x = glo.camera.getFrontPosition(glo.cam_dist).x;
+	var y = glo.camera.getFrontPosition(glo.cam_dist).y;
+	var z = glo.camera.getFrontPosition(glo.cam_dist).z;
+	reorient_meshes(meshes_to_return, true, false);
+	translate_meshes(meshes_to_return, -x, -y, -z);*/
+
+	var signe_z = 1;
+	if(glo.camera.position.z > 0){ signe_z = 1; }
+	var trans_z = glo.camera.position.z + (glo.cam_pose * signe_z);
+	var trans_x = glo.camera.position.x;
+	var trans_y = glo.camera.position.y;
+	translate_meshes(meshes_to_return, trans_x, trans_y, trans_z);
+
+	return meshes_to_return;
+}
 function add_spiral_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rot = "z"){
 	pos = {x: 0, y: 6 * glo.ecart_particules, z: 0};
 	var meshes_to_return = [];
@@ -1540,14 +1624,13 @@ function add_dbl_rot_of_meshes(nb_meshes, taille_mesh, taille, masse, pos,
 
 	if(glo.mode_check.getCheck('meta_mesh')){ glo.id_meta_mesh++; }
 
-	var signe_z = 1;
+	/*var signe_z = 1;
 	if(glo.camera.position.z > 0){ signe_z = -1; }
 	var trans_z = glo.camera.position.z + (glo.cam_pose * signe_z);
 	var trans_x = glo.camera.position.x;
 	var trans_y = glo.camera.position.y;
 
-	//rotate_meshes(meshes_to_return, 0, -120, 0);
-	translate_meshes(meshes_to_return, trans_x, trans_y, trans_z);
+	translate_meshes(meshes_to_return, trans_x, trans_y, trans_z);*/
 
 	return meshes_to_return;
 }
@@ -1764,6 +1847,48 @@ function add_cercle_of_meshes_test(nb_meshes, taille_mesh, taille, masse, pos){
 }
 
 //*****************ROTATE EN 3D SUR AXE CHOISI*****************
+function rotateAroundPoint(pos, pitch, roll, yaw, center, rad = false) {
+    var pitch_rad = rad ? pitch : pitch * Math.PI / 180;
+    var roll_rad = rad ? roll : roll * Math.PI / 180;
+    var yaw_rad = rad ? yaw : yaw * Math.PI / 180;
+
+    var cos = Math.cos;
+    var sin = Math.sin;
+
+    // Matrice de rotation
+    var cosa = cos(yaw_rad);
+    var sina = sin(yaw_rad);
+    var cosb = cos(pitch_rad);
+    var sinb = sin(pitch_rad);
+    var cosc = cos(roll_rad);
+    var sinc = sin(roll_rad);
+
+    var Axx = cosa * cosb;
+    var Axy = cosa * sinb * sinc - sina * cosc;
+    var Axz = cosa * sinb * cosc + sina * sinc;
+
+    var Ayx = sina * cosb;
+    var Ayy = sina * sinb * sinc + cosa * cosc;
+    var Ayz = sina * sinb * cosc - cosa * sinc;
+
+    var Azx = -sinb;
+    var Azy = cosb * sinc;
+    var Azz = cosb * cosc;
+
+    // Translation pour centrer la rotation
+    var dx = pos.x - center.x;
+    var dy = pos.y - center.y;
+    var dz = pos.z - center.z;
+
+    // Application de la matrice de rotation
+    var pos_to_return = {};
+    pos_to_return.x = Axx * dx + Axy * dy + Axz * dz + center.x;
+    pos_to_return.y = Ayx * dx + Ayy * dy + Ayz * dz + center.y;
+    pos_to_return.z = Azx * dx + Azy * dy + Azz * dz + center.z;
+
+    return pos_to_return;
+}
+
 function rotate(pos, pitch, roll, yaw, rad = false) {
 	var pitch_rad = pitch * Math.PI / 180;
 	var roll_rad = roll * Math.PI / 180;
