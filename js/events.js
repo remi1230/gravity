@@ -54,6 +54,8 @@ window.addEventListener("keydown", function (e) {
 			let mesh = selectNextMesh();
 			if(mesh){ goToMesh(mesh); }
 
+			if(glo.mode.cameraFollowMesh){ glo.meshToFollowByCamera = mesh; }
+
 			break;
 		/// x -- Les boules rotationnent -- boule, rotation -- rotate_mesh ///
 		case "x":
@@ -173,6 +175,16 @@ window.addEventListener("keydown", function (e) {
 		/// g -- Inverse le gravité -- gravité ///
 		case "g":
 			inverse_g(meshes);
+
+			break;
+		/// A -- Positionne la caméra sur la boule la plus proches des autres -- boule, position ///
+		case "A":
+			goToMeshNearestToOthers();
+
+			break;
+		/// O -- Repositionne les boules à leur position d'origine -- boule, position ///
+		case "O":
+			meshesToOriginPosition();
 
 			break;
 		case "à":
@@ -437,7 +449,7 @@ function add_meshes(nb_meshes, taille_mesh, taille, masse, pos = {x: 0, y: 0, z:
 		case "Coquillage":
 			add_spicube_of_meshes(nb_meshes, taille_mesh, taille, masse, pos);
 			break;
-		case "CircleCircles":
+		case "ToreTest":
 			add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos);
 			break;
 		case "Tore":
@@ -731,6 +743,7 @@ function add_one_mesh(taille_mesh, taille, masse, pos,
 	if(glo.mode.numero){ num_meshes([mesh]); }
 
 	mesh.position = new BABYLON.Vector3(pos.x, pos.y, pos.z);
+	mesh.startPos = new BABYLON.Vector3(pos.x, pos.y, pos.z);
 
 	if(glo.mode_check.getCheck('meta_mesh')){
 		mesh.meta_mesh = true;
@@ -2368,7 +2381,53 @@ function cameraFollowMesh(){
 	}
 }
 
+function meshesToOriginPosition(theMeshes = meshes){
+	theMeshes.forEach(mesh => {
+		mesh.position.x = mesh.startPos.x;
+		mesh.position.y = mesh.startPos.y;
+		mesh.position.z = mesh.startPos.z;
 
+		mesh.virtual_x = mesh.startPos.x;
+		mesh.virtual_y = mesh.startPos.y;
+		mesh.virtual_z = mesh.startPos.z;
+
+		mesh.z_vx = 0;
+		mesh.z_vy = 0;
+		mesh.z_vz = 0;
+
+		mesh.virtual_vx = 0;
+		mesh.virtual_vy = 0;
+		mesh.virtual_vz = 0;
+
+		mesh.z_ax = 0;
+		mesh.z_ay = 0;
+		mesh.z_az = 0;
+	});
+}
+
+function goToMeshNearestToOthers(theMeshes = meshes){
+	glo.meshToFollowByCamera = false;
+
+	theMeshes.forEach(meshSource => {
+		meshSource.distMinToOthers = false;
+		theMeshes.forEach(meshTarget => {
+			if(meshSource !== meshTarget){
+				let dist = meshSource.dist_to_mesh(meshTarget).dist;
+				if(meshSource.distMinToOthers === false || meshSource.distMinToOthers > dist){
+					meshSource.distMinToOthers = dist;
+				}
+			}
+		});
+	});
+
+	theMeshes.forEach(mesh => {
+		if(!glo.meshToFollowByCamera || glo.meshToFollowByCamera.distMinToOthers > mesh.distMinToOthers){
+			glo.meshToFollowByCamera = mesh;
+		}
+	});
+
+	glo.camera.focusOn([glo.meshToFollowByCamera], true);
+}
 
 //*****************CALCUL LA POSITION DE LA SOURIS*****************
 function getMouse_Pos(canvas, evt) {

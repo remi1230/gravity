@@ -512,21 +512,6 @@ function add_colors_radios(sc){
   glo.advancedTexture.addControl(panel_param);
   var panel_type = new BABYLON.GUI.StackPanel();
   glo.advancedTexture.addControl(panel_type);
-  /*var panel_param_2 = new BABYLON.GUI.StackPanel();
-  glo.advancedTexture.addControl(panel_param_2);
-  var panel_type_2 = new BABYLON.GUI.StackPanel();
-  glo.advancedTexture.addControl(panel_type_2);
-
-  panel_param_2.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-  panel_param_2.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
-  panel_param_2.paddingLeft = '4%';
-  panel_param_2.width = '20%';
-  panel_param_2.top = '23.6%';
-  panel_type_2.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
-  panel_type_2.verticalAlignment = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
-  panel_type_2.paddingLeft = '4%';
-  panel_type_2.width = '20%';
-  panel_type_2.top = '29.4%';*/
 
   panel_param.horizontalAlignment = BABYLON.GUI.Control.HORIZONTAL_ALIGNMENT_LEFT;
   panel_param.verticalAlignment   = BABYLON.GUI.Control.VERTICAL_ALIGNMENT_TOP;
@@ -543,14 +528,14 @@ function add_colors_radios(sc){
   panel_type.top                  = '72%';
   //panel_type.background           = 'red';
 
-  var header_param = new BABYLON.GUI.TextBlock();
+  /*var header_param = new BABYLON.GUI.TextBlock();
   header_param.text = "Couleurs:";
   header_param.paddingLeft = 0;
   header_param.width = "200%";
   header_param.name = "headerColorsTitle";
-  /*header_param.zIndex = -1;
-  header_param.background = 'blue';*/
-  panel_param.addControl(header_param);
+  header_param.zIndex = -1;
+  header_param.background = 'blue';
+  panel_param.addControl(header_param);*/
   panel_param.name = 'panelColorsParam';
   panel_param.isVertical = false;
   panel_type.name = 'panelColorsType';
@@ -609,7 +594,7 @@ function add_colors_radios(sc){
 
   glo.panelParam   = panel_param;
   glo.panelType    = panel_type;
-  glo.header_param = header_param;
+  //glo.header_param = header_param;
 }
 function add_cohesion_posee_slider(sc){
   var panel = new BABYLON.GUI.StackPanel();
