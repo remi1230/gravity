@@ -101,8 +101,6 @@ function calcul_gravity(){
 			mesh_attire.virtual_y += mesh_attire.z_vy * temps;
 			mesh_attire.virtual_z += mesh_attire.z_vz * temps;
 
-			var somme_acceleration = mesh_attire.z_ax + mesh_attire.z_ay + mesh_attire.z_az;
-
 			if(mesh_attire.is_trail){
 				mesh_attire.computeWorldMatrix(true);
 				add_trails(glo.mode_check.getCheck('trail'), [mesh_attire]);

@@ -1004,7 +1004,7 @@ function add_var_trail_diameter_slider(sc){
   var slider = new BABYLON.GUI.Slider();
   slider.name = 'trail_length';
   slider.minimum = 0.01;
-  slider.maximum = 0.2;
+  slider.maximum = 1;
   slider.value = glo.trail.length;
   slider.onValueChangedObservable.add(function (value) {
     var val = value;

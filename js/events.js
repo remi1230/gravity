@@ -322,7 +322,7 @@ function add_trails(mode_trail = glo.mode_check.getCheck('trail'), ms = [],
 	options = {diameter: glo.trail.diameter, length_trail: glo.trail.length, autoStart: glo.trail.autoStart}){
 	if(mode_trail){
 		ms.map(mesh => {
-			options.diameter = mesh.taille_mesh * 1 / 2.8;
+			options.diameter = mesh.taille_mesh * glo.trail.diameter / 2.8;
 			var newTrail = new BABYLON.TrailMesh("sphere_trail_" + num_mesh, mesh, glo.scene, options.diameter, options.length_trail, options.autoStart);
 			newTrail.material = new BABYLON.StandardMaterial('trailMat', glo.scene);
 			mesh.trail = newTrail;
@@ -523,10 +523,12 @@ function invSpeedSliders(){
 	vzSlider.value = -vzSlider.value;
 }
 
-function add_one_mesh(taille_mesh, taille, masse, pos,
-	vitesse = {x: glo.vitesse_pose_x, y: glo.vitesse_pose_y, z: glo.vitesse_pose_z}){
+function add_one_mesh(taille_mesh, taille = glo.taille_mesh, masse, pos,
+	vitesse = {x: glo.vitesse_pose_x, y: glo.vitesse_pose_y, z: glo.vitesse_pose_z}, center){
+	
+	if(vitesse === 'default'){ vitesse = {x: glo.vitesse_pose_x, y: glo.vitesse_pose_y, z: glo.vitesse_pose_z}; }
 
-	taille_mesh = glo.taille_mesh;
+	taille_mesh = taille;
 	var ajout_ts = 0;
 	var scale_taille = 1;
 	if(glo.mode.random_taille){
@@ -584,9 +586,9 @@ function add_one_mesh(taille_mesh, taille, masse, pos,
 	}
 
 	mesh.num = num_mesh;
-
 	num_mesh++;
 
+	mesh.center    = center;
 	mesh.selection = false;
 
 	mesh.dist_to_mesh = function(oth_mesh){
@@ -1675,7 +1677,7 @@ function add_sphere_X_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rot_
 				var pos_mesh = rotate(pos, i, i, i);
 				break;
 		}
-		if(!same_pos_to_one_meshes(meshes_to_return, pos_mesh)){ meshes_to_return.push(add_one_mesh(taille_mesh, taille, masse, pos_mesh)); }
+		if(!same_pos_to_one_meshes(meshes_to_return, pos_mesh)){ meshes_to_return.push(add_one_mesh(taille_mesh, taille, masse, pos_mesh, 'default', pos)); }
 	}
 	var m_to_r = [];
 	Object.assign(m_to_r, meshes_to_return);
@@ -2409,19 +2411,16 @@ function goToMeshNearestToOthers(theMeshes = meshes){
 	glo.meshToFollowByCamera = false;
 
 	theMeshes.forEach(meshSource => {
-		meshSource.distMinToOthers = false;
+		meshSource.distToOthers = false;
 		theMeshes.forEach(meshTarget => {
 			if(meshSource !== meshTarget){
-				let dist = meshSource.dist_to_mesh(meshTarget).dist;
-				if(meshSource.distMinToOthers === false || meshSource.distMinToOthers > dist){
-					meshSource.distMinToOthers = dist;
-				}
+				meshSource.distToOthers += meshSource.dist_to_mesh(meshTarget).dist;
 			}
 		});
 	});
 
 	theMeshes.forEach(mesh => {
-		if(!glo.meshToFollowByCamera || glo.meshToFollowByCamera.distMinToOthers > mesh.distMinToOthers){
+		if(!glo.meshToFollowByCamera || glo.meshToFollowByCamera.distToOthers > mesh.distToOthers){
 			glo.meshToFollowByCamera = mesh;
 		}
 	});

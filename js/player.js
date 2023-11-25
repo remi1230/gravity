@@ -96,7 +96,7 @@ var glo = {
 		}
 	},
 	trail: {
-		diameter: 0.1,
+		diameter: 0.2,
 		length: 60,
 		autoStart: true,
 		color: true,
