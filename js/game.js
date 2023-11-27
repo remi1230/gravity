@@ -1,3 +1,51 @@
+Player = function(game, canvas) {
+  // La scène du jeu
+  this.scene = game.scene;
+
+  // Initialisation de la caméra
+  this._initCamera(this.scene, canvas);
+};
+
+Arena = function(game) {
+  this.game = game;
+  var scene = game.scene;
+
+  var light = new BABYLON.HemisphericLight(
+    "light1",
+    new BABYLON.Vector3(0.3, 0.6, 0),
+    scene
+  );
+  light.intensity = 0.7;
+  glo.light = light;
+};
+
+Player.prototype = {
+  _initCamera : function(scene, canvas) {
+
+    this.camera = new BABYLON.ArcRotateCamera(
+      "Camera",
+      Math.PI / 2,
+      Math.PI / 2,
+      -glo.cam_pose,
+      new BABYLON.Vector3.Zero(),
+      scene
+    );
+
+    this.camera.attachControl(canvas, true);
+    this.camera.inputs.attached.keyboard.detachControl();
+    this.camera.lowerAlphaLimit = null;
+    this.camera.upperAlphaLimit = null;
+    this.camera.lowerBetaLimit = null;
+    this.camera.upperBetaLimit = Math.PI;
+    glo.camera = this.camera;
+    glo.camera_start_orientation = {
+      alpha: glo.camera.alpha,
+      beta: glo.camera.beta,
+    };
+    glo.camera_target = this.camera.getTarget();
+  }
+}
+
 Game = function(canvasId) {
     var canvas = document.getElementById(canvasId);
     var engine = new BABYLON.Engine(canvas, true, {doNotHandleContextLost: true});
@@ -51,3 +99,5 @@ Game.prototype = {
         return scene;
     }
 };
+
+var g = new Game('renderCanvas');

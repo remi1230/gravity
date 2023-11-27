@@ -182,6 +182,11 @@ window.addEventListener("keydown", function (e) {
 			goToMeshNearestToOthers();
 
 			break;
+		/// M -- Positionne les Meshes posés au mean point -- boule, position -- posOnMeshesMeanPoint ///
+		case "M":
+			glo.mode.posOnMeshesMeanPoint = !glo.mode.posOnMeshesMeanPoint;
+
+			break;
 		/// O -- Repositionne les boules à leur position d'origine -- boule, position ///
 		case "O":
 			meshesToOriginPosition();
@@ -411,6 +416,8 @@ function crush(ms, coeff){
 function add_meshes(nb_meshes, taille_mesh, taille, masse, pos = {x: 0, y: 0, z: 0}){
 	var form_select = glo.formes.getFormeSelect().text;
 
+	pos = !glo.mode.posOnMeshesMeanPoint ? pos : calculMeshesMeanPos();
+
 	switch(form_select){
 		case "One":
 			glo.camera.setTarget(new BABYLON.Vector3(0,0,-6));
@@ -450,25 +457,11 @@ function add_meshes(nb_meshes, taille_mesh, taille, masse, pos = {x: 0, y: 0, z:
 			add_spicube_of_meshes(nb_meshes, taille_mesh, taille, masse, pos);
 			break;
 		case "ToreTest":
-			add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos);
+			var rots = generate3XYZ.next().value;
+			add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rots);
 			break;
 		case "Tore":
-			//let rots = getToreRots.next().value; console.log(rots);
-			//add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rots);
-
-			let rots = {
-				x1: 0,
-				y1: 0,
-				z1: 1,
-				x2: 0,
-				y2: 1,
-				z2: 0,
-				x3: 0,
-				y3: 0,
-				z3: 1,
-			};
-
-			add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rots);
+			add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos);
 			break;
 		case "Vortex":
 			var options = {
@@ -493,18 +486,53 @@ function add_meshes(nb_meshes, taille_mesh, taille, masse, pos = {x: 0, y: 0, z:
 			};
 			add_dbl_rot_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, options);
 			break;
-		case "Test":
-			//o.div_rot_2.y = 1.1;
-			//o.pos = {x: 6 * glo.ecart_particules, y: 2 * glo.ecart_particules, z: 4 * glo.ecart_particules}
-			o.rot_1 = o.getRot1();
-			o.rot_2 = o.getRot2();
-			add_test_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, o);
+		case "Sphère Fib":
+			addSphereFibonacci(nb_meshes, taille_mesh, taille, masse, pos);
 			break;
 	}
 	//glo.camera.alpha = Math.PI/2;
 	if(glo.mode_check.getCheck('meta_mesh')){ glo.id_meta_mesh++; }
 
+	if(glo.mode.posOnMeshesMeanPoint){ goToMeanMeshesPos(); }
+
 	meshesList = selectNextMeshGen();
+}
+
+function addSphereFibonacci(nb_meshes, taille_mesh, taille, masse, pos){
+	let points = posPointsWithFibonacci(nb_meshes * 10, glo.ecart_particules * 10, pos);
+
+	newMeshes = [];
+	points.forEach(point => {
+		newMeshes.push(add_one_mesh(taille_mesh, taille, masse, point));
+	});
+	goToMeanMeshesPos(newMeshes);
+}
+
+function posPointsWithFibonacci(n, rayon, pos) {
+    let points = [];
+    let phi    = Math.PI * (3 - Math.sqrt(5));  // angle d'or en radians
+
+    for (var i = 0; i < n; i++) {
+        let y = 1 - (i / (n - 1)) * 2;  // y va de 1 à -1
+        let rayonHorizontal = Math.sqrt(1 - y * y);  // rayon à cette hauteur
+
+        let angle = phi * i;  // angle selon la répartition de Fibonacci
+
+        let x = Math.cos(angle) * rayonHorizontal * rayon;
+        let z = Math.sin(angle) * rayonHorizontal * rayon;
+
+		let p = {x: x + pos.x, y: (y*rayon) + pos.y, z: z + pos.z};
+
+		if(i === 1){
+			points[i-1] = {x: (points[i-1].x + p.x) / 2, y: (points[i-1].y + p.y) / 2, z: (points[i-1].z + p.z) / 2};
+		}
+		else if(i === n-1){
+			points[i-2] = {x: (points[i-2].x + p.x) / 2, y: (points[i-2].y + p.y) / 2, z: (points[i-2].z + p.z) / 2};
+		}
+		else{ points.push(p); }
+    }
+
+    return points;
 }
 
 function selectNextMesh(){ return meshesList ? meshesList.next().value : false; }
@@ -1295,7 +1323,7 @@ function add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rots = {
 	y3: 0,
 	z3: 1,
 }){
-	pos = {x: 1, y: 6 * glo.ecart_particules, z: 1};
+	pos = {x: 0, y: 6 * glo.ecart_particules, z: 0};
 	var meshes_to_return = [];
 	var centerCircles    = [];
 
@@ -1308,10 +1336,11 @@ function add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rots = {
 		}
 	}
 
+	const offsetToCenter = taille*3;
 	let n = 0;
 	centerCircles.forEach(centerPos => {
 		k = 0;
-		let posToRotate = {x: centerPos.x + 0, y: centerPos.y + PI, z: centerPos.z + 0	};
+		let posToRotate = {x: centerPos.x + 0, y: centerPos.y + offsetToCenter, z: centerPos.z + 0};
 		for(var i = 0; i < 360; i+=sup_i){
 			k++;
 			if(k <= nb_meshes){
