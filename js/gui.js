@@ -26,6 +26,7 @@ function add_gui_controls(sc){
   add_vitesse_x_slider(sc);
   add_vitesse_y_slider(sc);
   add_vitesse_z_slider(sc);
+  add_vitesse_abs_slider(sc);
   add_echelle_slider(sc);
 
   param_controls(sc);
@@ -924,6 +925,32 @@ function add_vitesse_z_slider(sc){
     if(glo.echelle < 1){ val = (value * glo.echelle).toFixed(2); }
     glo.vitesse_pose_z = val * glo.echelle_vitesse;
     header.text = "Vitesse Z: " + val;
+  });
+  panel.addControl(slider);
+
+  glo.headers.push(header);
+  glo.sliders_right.push(slider);
+  glo.panels_right.push(panel);
+}
+function add_vitesse_abs_slider(sc){
+  var panel = new BABYLON.GUI.StackPanel();
+
+  glo.advancedTexture.addControl(panel);
+
+  var header = new BABYLON.GUI.TextBlock();
+  header.text = "Vitesse ABS: " + glo.vitesse_pose_abs;
+  panel.addControl(header);
+
+  var slider = new BABYLON.GUI.Slider();
+  slider.name = 'vitesse_abs';
+  slider.minimum = -10;
+  slider.maximum = 10;
+  slider.value = glo.vitesse_pose_abs;
+  slider.onValueChangedObservable.add(function (value) {
+    var val = parseInt(value * glo.echelle);
+    if(glo.echelle < 1){ val = (value * glo.echelle).toFixed(2); }
+    glo.vitesse_pose_abs = val;
+    header.text = "Vitesse ABS: " + val;
   });
   panel.addControl(slider);
 

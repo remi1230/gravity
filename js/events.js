@@ -192,6 +192,16 @@ window.addEventListener("keydown", function (e) {
 			meshesToOriginPosition();
 
 			break;
+		/// P -- La boule est posée en orbite -- boule, position ///
+		case "P":
+			glo.mode.orbite = !glo.mode.orbite;
+
+			break;
+		/// R -- Lorsque la boule est posée en orbite, le vecteur est rotationné -- boule, position ///
+		case "R":
+			glo.mode.orbiteRandom = !glo.mode.orbiteRandom;
+
+			break;
 		case "à":
 			//FREE
 
@@ -461,7 +471,19 @@ function add_meshes(nb_meshes, taille_mesh, taille, masse, pos = {x: 0, y: 0, z:
 			add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, rots);
 			break;
 		case "Tore":
-			add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos);
+			const testRot = {
+				x1: 0,
+				y1: 0,
+				z1: 1,
+				x2: 0,
+				y2: 1,
+				z2: 0,
+				x3: 0,
+				y3: 0,
+				z3: 1,
+			};
+
+			add_tore_of_meshes(nb_meshes, taille_mesh, taille, masse, pos, testRot);
 			break;
 		case "Vortex":
 			var options = {
@@ -509,7 +531,7 @@ function addSphereFibonacci(nb_meshes, taille_mesh, taille, masse, pos){
 }
 
 function posPointsWithFibonacci(n, rayon, pos) {
-    let points = [];
+	let points = [];
     let phi    = Math.PI * (3 - Math.sqrt(5));  // angle d'or en radians
 
     for (var i = 0; i < n; i++) {
@@ -523,6 +545,7 @@ function posPointsWithFibonacci(n, rayon, pos) {
 
 		let p = {x: x + pos.x, y: (y*rayon) + pos.y, z: z + pos.z};
 
+		//Code que j'ai rajouté pour fusionner chacune des paires de points situés aux pôles
 		if(i === 1){
 			points[i-1] = {x: (points[i-1].x + p.x) / 2, y: (points[i-1].y + p.y) / 2, z: (points[i-1].z + p.z) / 2};
 		}
@@ -533,6 +556,20 @@ function posPointsWithFibonacci(n, rayon, pos) {
     }
 
     return points;
+}
+
+function pointsOnSameTopo(points){
+	const pow = Math.pow;
+	const distBetweenPoints = (p1, p2) => pow(pow(p2.x - p1.x, 2) + pow(p2.y - p1.y, 2) + pow(p2.z - p1.z, 2), 0.5);
+
+	let dist = 0;
+	points.forEach((currPoint, i) => {
+		if(i){
+			dist += distBetweenPoints(points[i-1], currPoint);
+		}
+	});
+
+	dist /= points.length;
 }
 
 function selectNextMesh(){ return meshesList ? meshesList.next().value : false; }
@@ -664,6 +701,37 @@ function add_one_mesh(taille_mesh, taille = glo.taille_mesh, masse, pos,
 			break;
 		}
 	}
+
+  if(glo.mode.orbite){
+	let V = new BABYLON.Vector3(pos.x, pos.y, pos.z);
+
+	// Calculer le vecteur OV
+	let OV = V.clone();
+
+	// Choisir un vecteur de base pour le produit vectoriel
+	let baseVector = new BABYLON.Vector3(1, 0, 0);
+	if (areVectorsParallel(OV, baseVector)) {
+		baseVector = new BABYLON.Vector3(0, 1, 0);
+	}
+
+	// Calculer le vecteur perpendiculaire
+	let perpendicularVector = BABYLON.Vector3.Cross(OV, baseVector).normalize();
+
+	if(glo.mode.orbiteRandom){
+		let angle = Math.PI / (4 * Math.random());
+		let rotationMatrix  = BABYLON.Matrix.RotationAxis(OV, angle);
+		perpendicularVector = BABYLON.Vector3.TransformCoordinates(perpendicularVector, rotationMatrix);
+	}
+
+	vitesse.x = glo.vitesse_pose_abs * perpendicularVector.x / 10;
+	vitesse.y = glo.vitesse_pose_abs * perpendicularVector.y / 10;
+	vitesse.z = glo.vitesse_pose_abs * perpendicularVector.z / 10;
+  }
+
+  function areVectorsParallel(vec1, vec2) {
+    let crossProduct = BABYLON.Vector3.Cross(vec1, vec2);
+    return crossProduct.lengthSquared() < 0.0001; // Seuil pour tenir compte des imprécisions numériques
+}
 
   mesh.actionManager = new BABYLON.ActionManager(glo.scene);
 	mesh.actionManager.registerAction(

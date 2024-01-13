@@ -254,6 +254,7 @@ var glo = {
 	vitesse_pose_x: 0,
 	vitesse_pose_y: 0,
 	vitesse_pose_z: 0,
+	vitesse_pose_abs: 1,
 	echelle_vitesse_cible: 1,
 	div_diffuse_color: 166,
 	div_emissive_color: 666,
