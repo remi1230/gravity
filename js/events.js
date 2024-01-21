@@ -723,15 +723,29 @@ function add_one_mesh(taille_mesh, taille = glo.taille_mesh, masse, pos,
 		perpendicularVector = BABYLON.Vector3.TransformCoordinates(perpendicularVector, rotationMatrix);
 	}
 
-	vitesse.x = glo.vitesse_pose_abs * perpendicularVector.x / 10;
-	vitesse.y = glo.vitesse_pose_abs * perpendicularVector.y / 10;
-	vitesse.z = glo.vitesse_pose_abs * perpendicularVector.z / 10;
+	const firstMeshSelected = getFirstSelectedMesh();
+
+	if(!firstMeshSelected){
+		vitesse.x = glo.vitesse_pose_abs * perpendicularVector.x / 10;
+		vitesse.y = glo.vitesse_pose_abs * perpendicularVector.y / 10;
+		vitesse.z = glo.vitesse_pose_abs * perpendicularVector.z / 10;
+	}
+	else{
+		const m  = firstMeshSelected.z_masse;
+		const d  = BABYLON.Vector3.Distance(firstMeshSelected.position, V);
+
+		const vitesseOrbitale = Math.sqrt(m / d);
+
+		vitesse.x = vitesseOrbitale * perpendicularVector.x * 1;
+		vitesse.y = vitesseOrbitale * perpendicularVector.y * 1;
+		vitesse.z = vitesseOrbitale * perpendicularVector.z * 1;
+	}
   }
 
   function areVectorsParallel(vec1, vec2) {
     let crossProduct = BABYLON.Vector3.Cross(vec1, vec2);
     return crossProduct.lengthSquared() < 0.0001; // Seuil pour tenir compte des imprécisions numériques
-}
+  }
 
   mesh.actionManager = new BABYLON.ActionManager(glo.scene);
 	mesh.actionManager.registerAction(
@@ -895,6 +909,13 @@ function add_one_mesh(taille_mesh, taille = glo.taille_mesh, masse, pos,
 	//mesh.heckCollisions = true;
 
 	return mesh;
+}
+
+function getFirstSelectedMesh(){
+	for(let i = 0; i < meshes.length; i++){
+		if(meshes[i].selection){ return meshes[i]; }
+	}
+	return false;
 }
 
 function rotate_meshes_self(ms, angle){
