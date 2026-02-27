@@ -189,7 +189,12 @@ function GPUGravityEngine(scene, engine) {
     // Ping-pong : index 0 = tampon A, index 1 = tampon B
     this.posTextures = [null, null];
     this.velTextures = [null, null];
-    this.currentBuf  = 0;
+    // -1 = état initial (RawTextures), 0/1 = ProceduralTextures A/B
+    this.currentBuf  = -1;
+
+    // RawTextures de l'état initial (frame 0)
+    this.initPosTex = null;
+    this.initVelTex = null;
 
     // Rendu
     this.superMesh      = null;
@@ -224,23 +229,27 @@ GPUGravityEngine.prototype.init = function(particles) {
     this.initialized = true;
 };
 
-// Crée les textures GPGPU ping-pong et les initialise
+// Crée les textures GPGPU ping-pong.
+// NE PAS appeler render() ici : les shaders compilent de façon
+// asynchrone dans Babylon.js ; render() avant compilation provoque
+// "Cannot read properties of null (reading 'setTexture')".
+// Les RawTextures initiales restent l'état courant (currentBuf=-1)
+// jusqu'au premier step() où on vérifie isReady() avant de rendre.
 GPUGravityEngine.prototype._initGPGPU = function(posData, velData) {
-    var scene       = this.scene;
-    var N           = this.N;
+    var scene        = this.scene;
+    var N            = this.N;
     var samplingMode = BABYLON.Texture.NEAREST_SAMPLINGMODE || 1;
-    var floatType   = BABYLON.Engine.TEXTURETYPE_FLOAT || 1;
+    var floatType    = BABYLON.Engine.TEXTURETYPE_FLOAT || 1;
 
-    // Textures de données brutes pour l'état initial
-    var initPosTex = BABYLON.RawTexture.CreateRGBATexture(
+    // RawTextures : état initial (frame 0), lecture seule
+    this.initPosTex = BABYLON.RawTexture.CreateRGBATexture(
         posData, N, 1, scene, false, false, samplingMode, floatType
     );
-    var initVelTex = BABYLON.RawTexture.CreateRGBATexture(
+    this.initVelTex = BABYLON.RawTexture.CreateRGBATexture(
         velData, N, 1, scene, false, false, samplingMode, floatType
     );
 
-    // Création des 4 ProceduralTextures de ping-pong
-    // Taille N x 1 : une rangée de N texels, un par particule
+    // 4 ProceduralTextures de ping-pong (shaders compilés en async)
     var posA = new BABYLON.ProceduralTexture(
         "gpuPosA", {width: N, height: 1},
         "gpuGravPosition", scene, null, false, false, floatType
@@ -258,82 +267,69 @@ GPUGravityEngine.prototype._initGPGPU = function(posData, velData) {
         "gpuGravVelocity", scene, null, false, false, floatType
     );
 
-    // Désactiver le rafraîchissement automatique
-    // On appelle render() manuellement à chaque frame
+    // Désactiver le rafraîchissement automatique (render() manuel)
     [posA, posB, velA, velB].forEach(function(t) {
         t.refreshRate = -1;
     });
 
-    // --- Initialisation du tampon A depuis les données brutes ---
-    // copyMode = 1.0 : le shader recopie simplement la vitesse initiale
-    velA.setTexture("positionTexture", initPosTex);
-    velA.setTexture("velocityTexture", initVelTex);
-    velA.setFloat("N", N);
-    velA.setFloat("dt", 0.0);
-    velA.setFloat("limNewton", 1.0);
-    velA.setFloat("invG", 1.0);
-    velA.setFloat("copyMode", 1.0); // Passthrough : recopie sans physique
-    velA.render();
-
-    // dt = 0 : newPos = oldPos + newVel * 0 = oldPos (pure recopie)
-    posA.setTexture("positionTexture", initPosTex);
-    posA.setTexture("velocityTexture", velA);
-    posA.setFloat("N", N);
-    posA.setFloat("dt", 0.0);
-    posA.render();
-
-    // Le tampon B sera calculé depuis A lors du premier step()
     this.posTextures[0] = posA;
     this.posTextures[1] = posB;
     this.velTextures[0] = velA;
     this.velTextures[1] = velB;
-    this.currentBuf = 0;
 
-    // Nettoyage des textures brutes temporaires
-    initPosTex.dispose();
-    initVelTex.dispose();
+    // currentBuf = -1 : on utilise les RawTextures initiales
+    // jusqu'à ce que les shaders soient prêts (voir step())
+    this.currentBuf = -1;
 };
 
-// Calcule un pas de physique complet sur le GPU
-// Appelé à chaque frame depuis la boucle de rendu
+// Calcule un pas de physique complet sur le GPU.
+// Premier appel (currentBuf=-1) : rend depuis les RawTextures initiales
+// vers le tampon A, seulement si les shaders sont prêts (isReady()).
+// Appels suivants : ping-pong normal entre A (0) et B (1).
 GPUGravityEngine.prototype.step = function() {
-    var cur  = this.currentBuf;
-    var next = 1 - cur;
+    var usingInit = (this.currentBuf === -1);
+    var next      = usingInit ? 0 : (1 - this.currentBuf);
 
-    var posCur  = this.posTextures[cur];
-    var velCur  = this.velTextures[cur];
+    var posCur  = usingInit ? this.initPosTex : this.posTextures[this.currentBuf];
+    var velCur  = usingInit ? this.initVelTex : this.velTextures[this.currentBuf];
     var posNext = this.posTextures[next];
     var velNext = this.velTextures[next];
+
+    // Attendre que les shaders soient compilés avant le premier render()
+    if (!velNext.isReady() || !posNext.isReady()) return;
 
     var N         = this.N;
     var dt        = glo.temps;
     var limNewton = Math.max(0.0001, glo.lim_newton);
     var invG      = glo.mode.inv_g ? -1.0 : 1.0;
 
-    // Étape 1 : Calcul des nouvelles vitesses
-    // Le shader lit positions + vitesses courantes, calcule les
-    // forces gravitationnelles et met à jour les vitesses.
+    // Étape 1 : Nouvelles vitesses (force N-body sur GPU)
     velNext.setTexture("positionTexture", posCur);
     velNext.setTexture("velocityTexture", velCur);
     velNext.setFloat("N", N);
     velNext.setFloat("dt", dt);
     velNext.setFloat("limNewton", limNewton);
     velNext.setFloat("invG", invG);
-    velNext.setFloat("copyMode", 0.0); // Mode physique
+    velNext.setFloat("copyMode", 0.0);
     velNext.render();
 
-    // Étape 2 : Calcul des nouvelles positions
-    // Utilise les nouvelles vitesses (semi-implicit Euler)
+    // Étape 2 : Nouvelles positions (semi-implicit Euler)
     posNext.setTexture("positionTexture", posCur);
-    posNext.setTexture("velocityTexture", velNext); // Nouvelles vitesses !
+    posNext.setTexture("velocityTexture", velNext);
     posNext.setFloat("N", N);
     posNext.setFloat("dt", dt);
     posNext.render();
 
-    // Swap des tampons
+    // Swap
     this.currentBuf = next;
 
-    // Mise à jour du matériau de rendu avec les nouvelles textures
+    // Après le premier step, on n'a plus besoin des RawTextures initiales
+    if (usingInit) {
+        this.initPosTex.dispose(); this.initPosTex = null;
+        this.initVelTex.dispose(); this.initVelTex = null;
+    }
+
+    // Mise à jour du matériau de rendu
     if (this.shaderMaterial) {
         this.shaderMaterial.setTexture("positionTexture", posNext);
         this.shaderMaterial.setTexture("velocityTexture", velNext);
@@ -409,9 +405,11 @@ GPUGravityEngine.prototype._createShaderMaterial = function() {
     mat.setFloat("pointSize",  glo.gpu.pointSize);
     mat.setFloat("speedScale", 1.0 / Math.max(0.001, glo.modulation * 0.005));
 
-    // Textures courantes
-    mat.setTexture("positionTexture", this.posTextures[this.currentBuf]);
-    mat.setTexture("velocityTexture", this.velTextures[this.currentBuf]);
+    // Textures courantes : RawTextures initiales avant le premier step()
+    var posTex = (this.currentBuf === -1) ? this.initPosTex : this.posTextures[this.currentBuf];
+    var velTex = (this.currentBuf === -1) ? this.initVelTex : this.velTextures[this.currentBuf];
+    mat.setTexture("positionTexture", posTex);
+    mat.setTexture("velocityTexture", velTex);
 
     this.shaderMaterial = mat;
 };
@@ -426,10 +424,13 @@ GPUGravityEngine.prototype.updateUniforms = function() {
 GPUGravityEngine.prototype.dispose = function() {
     if (this.superMesh)      { this.superMesh.dispose();      this.superMesh = null; }
     if (this.shaderMaterial) { this.shaderMaterial.dispose(); this.shaderMaterial = null; }
+    if (this.initPosTex)     { this.initPosTex.dispose();     this.initPosTex = null; }
+    if (this.initVelTex)     { this.initVelTex.dispose();     this.initVelTex = null; }
     this.posTextures.forEach(function(t) { if (t) t.dispose(); });
     this.velTextures.forEach(function(t) { if (t) t.dispose(); });
     this.posTextures = [null, null];
     this.velTextures = [null, null];
+    this.currentBuf  = -1;
     this.initialized = false;
 };
 
