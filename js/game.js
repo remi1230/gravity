@@ -60,12 +60,17 @@ Game = function(canvasId) {
 	var _arena = new Arena(_this);
   _this.scene.executeWhenReady(function () {
     engine.runRenderLoop(function () {
-	    if(meshes.length > 0 && !glo.mode.pause){
-            if(glo.mode.cameraFollowMesh){ cameraFollowMesh(); }
-            
-            calcul_gravity();
+        if (!glo.mode.pause) {
+            if (glo.mode.gpu && gpuGravityEngine && gpuGravityEngine.initialized) {
+                // Mode full GPU : physique et rendu entièrement sur GPU
+                gpuGravityEngine.step();
+            } else if (meshes.length > 0) {
+                // Mode CPU classique
+                if (glo.mode.cameraFollowMesh) { cameraFollowMesh(); }
+                calcul_gravity();
+            }
         }
-      _this.scene.render();
+        _this.scene.render();
     });
   });
 

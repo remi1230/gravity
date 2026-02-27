@@ -31,6 +31,14 @@ var glo = {
 		box: false,
 		numero: false,
 		cameraFollowMesh: true,
+		gpu: false,           // Mode simulation full GPU
+	},
+	// Paramètres du moteur GPU
+	gpu: {
+		N:            100,  // Nombre de particules (max 512)
+		radius:       5,    // Rayon de la distribution initiale
+		pointSize:    8.0,  // Taille des points sprites (pixels)
+		initialSpeed: 0.2,  // Amplitude des vitesses initiales
 	},
 	mode_check:{
 		parent: this,
