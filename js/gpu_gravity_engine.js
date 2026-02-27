@@ -1,178 +1,85 @@
 // ============================================================
-// GPU Gravity Engine - Simulation N-body 100% GPU
+// GPU Gravity Engine - Physique N-body sur GPU
 //
 // Architecture :
-//   - GPGPU avec ping-pong de ProceduralTextures RGBA32F
-//     (posA/posB pour positions, velA/velB pour vitesses)
-//   - Un "super mesh" avec N vertices tous à (0,0,0)
-//   - Vertex shader : lit la texture de positions pour
-//     déplacer chaque vertex vers la bonne position
-//   - Fragment shader : couleur selon la vitesse (bleu→rouge)
+//   PHYSIQUE (GPU) :
+//     Ping-pong de ProceduralTextures RGBA32F — le fragment
+//     shader calcule les forces gravitationnelles entre toutes
+//     les paires de particules (O(n²) parallélisé sur GPU).
 //
-// Le problème N-body est résolu dans le fragment shader
-// de physique : pour chaque particule i, on boucle sur
-// toutes les j pour accumuler les forces gravitationnelles.
-// C'est O(n²) mais entièrement parallélisé sur le GPU.
+//   RENDU (hybride GPU→CPU) :
+//     Après chaque pas de physique, readPixels() async rapatrie
+//     positions et vitesses → mise à jour des meshes Babylon.js.
+//     → Évite le vertex texture sampling (peu fiable selon GPU).
 //
-// Activation : touche 'G' ou appel direct à initGPUMode()
+//   INITIALISATION :
+//     Si des meshes CPU existent (ajoutés via l'UI avec les
+//     formes Cube, Carré, etc.), on les utilise comme conditions
+//     initiales ET comme support de rendu.
+//     Sinon, un super mesh points cloud est créé.
+//
+// Activation : touche 'G'
 // ============================================================
 
-var GPU_MAX_PARTICLES = 512; // Limite de la boucle GLSL
+var GPU_MAX_PARTICLES = 512;
 
 // ============================================================
-// SHADERS - Physique (GPGPU)
+// SHADERS DE PHYSIQUE (GPGPU)
 // ============================================================
 
-// --- Shader de mise à jour des vitesses ---
-// Pour chaque particule i : calcule la force gravitationnelle
-// exercée par toutes les autres particules j, puis met à jour
-// la vitesse.  Correspond exactement à la physique CPU :
-//   ax += dist_x * mass_j / max(dist^3, lim_newton)
-//   vx += ax  (pas de temps implicite = 1, comme le CPU)
-// Le uniform "copyMode" permet l'initialisation sans physique.
+// Mise à jour des vitesses : force N-body gravitationnelle
+// Physique identique au CPU :
+//   force += diff * mass_j / max(dist³, lim_newton)
+//   newVel  = oldVel + force   (dt implicite = 1)
+// copyMode = 1.0 : passthrough pour l'initialisation
 BABYLON.Effect.ShadersStore["gpuGravVelocityFragmentShader"] = [
     "precision highp float;",
-    "",
-    "uniform sampler2D positionTexture;", // RGBA : x, y, z, masse
-    "uniform sampler2D velocityTexture;", // RGBA : vx, vy, vz, |v|
-    "uniform float N;",                   // Nombre de particules
-    "uniform float dt;",                  // Inutilisé ici (héritage)
-    "uniform float limNewton;",           // glo.lim_newton : min dist^3
-    "uniform float invG;",                // +1.0 ou -1.0 (inverse G)
-    "uniform float copyMode;",            // 1.0 = recopie sans physique
-    "",
+    "uniform sampler2D positionTexture;",
+    "uniform sampler2D velocityTexture;",
+    "uniform float N;",
+    "uniform float dt;",
+    "uniform float limNewton;",
+    "uniform float invG;",
+    "uniform float copyMode;",
     "varying vec2 vUV;",
-    "",
     "void main() {",
     "    float idx = floor(vUV.x * N);",
     "    float myU = (idx + 0.5) / N;",
-    "",
     "    vec4 myPos = texture2D(positionTexture, vec2(myU, 0.5));",
     "    vec4 myVel = texture2D(velocityTexture, vec2(myU, 0.5));",
-    "",
-    "    // Mode recopie pour l'initialisation",
-    "    if(copyMode > 0.5) {",
-    "        gl_FragColor = myVel;",
-    "        return;",
-    "    }",
-    "",
+    "    if(copyMode > 0.5) { gl_FragColor = myVel; return; }",
     "    vec3 force = vec3(0.0);",
-    "",
-    "    // Boucle N-body : accumulation des forces",
     "    for(int j = 0; j < 512; j++) {",
     "        float jf = float(j);",
     "        if(jf >= N) break;",
-    "        if(abs(jf - idx) < 0.5) continue;", // Ignorer soi-même
-    "",
+    "        if(abs(jf - idx) < 0.5) continue;",
     "        float jU = (jf + 0.5) / N;",
     "        vec4 other = texture2D(positionTexture, vec2(jU, 0.5));",
-    "",
     "        vec3 diff = other.xyz - myPos.xyz;",
     "        float dist = length(diff);",
     "        float dist3 = max(dist * dist * dist, limNewton);",
     "        force += diff * (other.w / dist3) * invG;",
     "    }",
-    "",
-    "    // Mise à jour vitesse (même formule que CPU : v += force)",
     "    vec3 newVel = myVel.xyz + force;",
     "    gl_FragColor = vec4(newVel, length(newVel));",
     "}"
 ].join("\n");
 
-// --- Shader de mise à jour des positions ---
-// newPos = oldPos + newVel * dt  (dt = glo.temps, comme le CPU)
+// Mise à jour des positions : newPos = oldPos + newVel * dt
 BABYLON.Effect.ShadersStore["gpuGravPositionFragmentShader"] = [
     "precision highp float;",
-    "",
     "uniform sampler2D positionTexture;",
-    "uniform sampler2D velocityTexture;", // Nouvelle vitesse (déjà calculée)
+    "uniform sampler2D velocityTexture;",
     "uniform float N;",
-    "uniform float dt;",                  // glo.temps
-    "",
+    "uniform float dt;",
     "varying vec2 vUV;",
-    "",
     "void main() {",
     "    float idx = floor(vUV.x * N);",
     "    float myU = (idx + 0.5) / N;",
-    "",
     "    vec4 myPos = texture2D(positionTexture, vec2(myU, 0.5));",
     "    vec4 newVel = texture2D(velocityTexture, vec2(myU, 0.5));",
-    "",
     "    vec3 newPos = myPos.xyz + newVel.xyz * dt;",
-    "    gl_FragColor = vec4(newPos, myPos.w);", // Conserver la masse
-    "}"
-].join("\n");
-
-// ============================================================
-// SHADERS - Rendu du super mesh
-// ============================================================
-
-// --- Vertex shader ---
-// Tous les vertices du super mesh sont à (0,0,0).
-// Ce shader lit la texture de positions pour déplacer chaque
-// vertex vers la bonne position dans l'espace 3D.
-// gl_PointSize permet d'ajuster la taille en fonction de la masse.
-BABYLON.Effect.ShadersStore["gpuGravParticleVertexShader"] = [
-    "attribute vec3 position;",        // Toujours (0,0,0)
-    "attribute float particleIndex;",  // Index 0..N-1
-    "",
-    "uniform mat4 viewProjection;",    // Matrice caméra (fournie par Babylon)
-    "uniform float N;",
-    "uniform float pointSize;",
-    "uniform sampler2D positionTexture;",
-    "",
-    "varying float vIndex;",
-    "",
-    "void main() {",
-    "    float u = (particleIndex + 0.5) / N;",
-    "    vec4 pData = texture2D(positionTexture, vec2(u, 0.5));",
-    "",
-    "    // Positionner le vertex à la position GPU calculée",
-    "    gl_Position = viewProjection * vec4(pData.xyz, 1.0);",
-    "",
-    "    // Taille du point sprite (proportionnelle à sqrt(masse))",
-    "    float sz = pointSize * sqrt(pData.w) * 3.0;",
-    "    gl_PointSize = clamp(sz, 2.0, 64.0);",
-    "",
-    "    vIndex = particleIndex;",
-    "}"
-].join("\n");
-
-// --- Fragment shader ---
-// Colorie chaque particule selon sa vitesse avec un dégradé :
-//   bleu (lent) → cyan → vert → jaune → orange → rouge → blanc (rapide)
-// Le point sprite est rendu comme un disque (avec bords adoucis).
-BABYLON.Effect.ShadersStore["gpuGravParticleFragmentShader"] = [
-    "precision highp float;",
-    "",
-    "uniform sampler2D velocityTexture;",
-    "uniform float N;",
-    "uniform float speedScale;",
-    "",
-    "varying float vIndex;",
-    "",
-    "vec3 speedToColor(float t) {",
-    "    if(t < 0.2) return mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 0.5, 1.0), t * 5.0);",
-    "    if(t < 0.4) return mix(vec3(0.0, 0.5, 1.0), vec3(0.0, 1.0, 0.0), (t - 0.2) * 5.0);",
-    "    if(t < 0.6) return mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 1.0, 0.0), (t - 0.4) * 5.0);",
-    "    if(t < 0.8) return mix(vec3(1.0, 1.0, 0.0), vec3(1.0, 0.3, 0.0), (t - 0.6) * 5.0);",
-    "    return mix(vec3(1.0, 0.3, 0.0), vec3(1.0, 1.0, 1.0), (t - 0.8) * 5.0);",
-    "}",
-    "",
-    "void main() {",
-    "    float u = (vIndex + 0.5) / N;",
-    "    vec4 vel = texture2D(velocityTexture, vec2(u, 0.5));",
-    "    float speed = clamp(vel.w * speedScale, 0.0, 1.0);",
-    "",
-    "    vec3 color = speedToColor(speed);",
-    "",
-    "    // Disque circulaire avec bord adouci (point sprite)",
-    "    vec2 center = gl_PointCoord - 0.5;",
-    "    float d = length(center);",
-    "    if(d > 0.5) discard;",
-    "",
-    "    float alpha = 1.0 - smoothstep(0.3, 0.5, d);",
-    "    gl_FragColor = vec4(color, alpha);",
+    "    gl_FragColor = vec4(newPos, myPos.w);",
     "}"
 ].join("\n");
 
@@ -186,62 +93,64 @@ function GPUGravityEngine(scene, engine) {
     this.N      = 0;
     this.initialized = false;
 
-    // Ping-pong : index 0 = tampon A, index 1 = tampon B
     this.posTextures = [null, null];
     this.velTextures = [null, null];
-    // -1 = état initial (RawTextures), 0/1 = ProceduralTextures A/B
-    this.currentBuf  = -1;
+    this.currentBuf  = -1; // -1 = RawTextures initiales
 
-    // RawTextures de l'état initial (frame 0)
     this.initPosTex = null;
     this.initVelTex = null;
 
-    // Rendu
-    this.superMesh      = null;
-    this.shaderMaterial = null;
+    // Meshes Babylon.js utilisés pour le rendu
+    // null  → on crée un super mesh points cloud
+    // array → meshes CPU existants pilotés par la physique GPU
+    this.gpuMeshes = null;
+    this.superMesh = null;
+
+    // Buffers de readback (Float32Array alloués une fois)
+    this._posReadBuf = null;
+    this._velReadBuf = null;
 }
 
-// Initialise le moteur avec un tableau de particules
-// Chaque particule : { x, y, z, mass, vx, vy, vz }
-GPUGravityEngine.prototype.init = function(particles) {
+// init(particles, gpuMeshes)
+//   particles  : [{x,y,z,mass,vx,vy,vz}, ...]
+//   gpuMeshes  : tableau de meshes Babylon.js existants (ou null)
+GPUGravityEngine.prototype.init = function(particles, gpuMeshes) {
     if (this.initialized) this.dispose();
 
     this.N = Math.min(particles.length, GPU_MAX_PARTICLES);
-    var N  = this.N;
+    var N = this.N;
 
-    // Packing des données initiales dans des Float32Array
+    this.gpuMeshes = gpuMeshes || null;
+
     var posData = new Float32Array(N * 4);
     var velData = new Float32Array(N * 4);
-
     for (var i = 0; i < N; i++) {
-        posData[i * 4]     = particles[i].x    || 0;
-        posData[i * 4 + 1] = particles[i].y    || 0;
-        posData[i * 4 + 2] = particles[i].z    || 0;
-        posData[i * 4 + 3] = particles[i].mass || 1;
-        velData[i * 4]     = particles[i].vx   || 0;
-        velData[i * 4 + 1] = particles[i].vy   || 0;
-        velData[i * 4 + 2] = particles[i].vz   || 0;
-        velData[i * 4 + 3] = 0; // |v| calculé par le shader
+        posData[i*4]   = particles[i].x    || 0;
+        posData[i*4+1] = particles[i].y    || 0;
+        posData[i*4+2] = particles[i].z    || 0;
+        posData[i*4+3] = particles[i].mass || 1;
+        velData[i*4]   = particles[i].vx   || 0;
+        velData[i*4+1] = particles[i].vy   || 0;
+        velData[i*4+2] = particles[i].vz   || 0;
+        velData[i*4+3] = 0;
     }
 
+    this._posReadBuf = new Float32Array(N * 4);
+    this._velReadBuf = new Float32Array(N * 4);
+
     this._initGPGPU(posData, velData);
-    this._createSuperMesh();
+    this._initRendering(particles);
     this.initialized = true;
 };
 
-// Crée les textures GPGPU ping-pong.
-// NE PAS appeler render() ici : les shaders compilent de façon
-// asynchrone dans Babylon.js ; render() avant compilation provoque
-// "Cannot read properties of null (reading 'setTexture')".
-// Les RawTextures initiales restent l'état courant (currentBuf=-1)
-// jusqu'au premier step() où on vérifie isReady() avant de rendre.
+// Crée les ProceduralTextures de ping-pong.
+// Pas de render() ici : les shaders compilent en async.
 GPUGravityEngine.prototype._initGPGPU = function(posData, velData) {
     var scene        = this.scene;
     var N            = this.N;
     var samplingMode = BABYLON.Texture.NEAREST_SAMPLINGMODE || 1;
     var floatType    = BABYLON.Engine.TEXTURETYPE_FLOAT || 1;
 
-    // RawTextures : état initial (frame 0), lecture seule
     this.initPosTex = BABYLON.RawTexture.CreateRGBATexture(
         posData, N, 1, scene, false, false, samplingMode, floatType
     );
@@ -249,7 +158,6 @@ GPUGravityEngine.prototype._initGPGPU = function(posData, velData) {
         velData, N, 1, scene, false, false, samplingMode, floatType
     );
 
-    // 4 ProceduralTextures de ping-pong (shaders compilés en async)
     var posA = new BABYLON.ProceduralTexture(
         "gpuPosA", {width: N, height: 1},
         "gpuGravPosition", scene, null, false, false, floatType
@@ -267,25 +175,56 @@ GPUGravityEngine.prototype._initGPGPU = function(posData, velData) {
         "gpuGravVelocity", scene, null, false, false, floatType
     );
 
-    // Désactiver le rafraîchissement automatique (render() manuel)
-    [posA, posB, velA, velB].forEach(function(t) {
-        t.refreshRate = -1;
-    });
+    [posA, posB, velA, velB].forEach(function(t) { t.refreshRate = -1; });
 
     this.posTextures[0] = posA;
     this.posTextures[1] = posB;
     this.velTextures[0] = velA;
     this.velTextures[1] = velB;
-
-    // currentBuf = -1 : on utilise les RawTextures initiales
-    // jusqu'à ce que les shaders soient prêts (voir step())
     this.currentBuf = -1;
 };
 
-// Calcule un pas de physique complet sur le GPU.
-// Premier appel (currentBuf=-1) : rend depuis les RawTextures initiales
-// vers le tampon A, seulement si les shaders sont prêts (isReady()).
-// Appels suivants : ping-pong normal entre A (0) et B (1).
+// Prépare le rendu :
+//   - Si gpuMeshes fournis → on les utilise directement
+//   - Sinon → crée un super mesh PointsCloud mis à jour par CPU
+GPUGravityEngine.prototype._initRendering = function(particles) {
+    if (this.gpuMeshes && this.gpuMeshes.length > 0) {
+        // Les meshes existants sont déjà positionnés
+        return;
+    }
+
+    // Création d'un super mesh points cloud
+    var N     = this.N;
+    var scene = this.scene;
+
+    var positions = [];
+    var colors    = [];
+    var indices   = [];
+
+    for (var i = 0; i < N; i++) {
+        positions.push(particles[i].x || 0, particles[i].y || 0, particles[i].z || 0);
+        colors.push(0, 0, 1, 1); // Bleu initial
+        indices.push(i);
+    }
+
+    var mesh = new BABYLON.Mesh("gpuSuperMesh", scene);
+    var vd   = new BABYLON.VertexData();
+    vd.positions = positions;
+    vd.colors    = colors;
+    vd.indices   = indices;
+    vd.applyToMesh(mesh, true); // updatable = true
+
+    var mat = new BABYLON.StandardMaterial("gpuPointsMat", scene);
+    mat.pointsCloud       = true;
+    mat.pointSize         = glo.gpu.pointSize;
+    mat.disableLighting   = true;
+    mat.vertexColorEnabled = true;
+    mesh.material = mat;
+
+    this.superMesh = mesh;
+};
+
+// Pas de physique GPU + readback asynchrone des résultats
 GPUGravityEngine.prototype.step = function() {
     var usingInit = (this.currentBuf === -1);
     var next      = usingInit ? 0 : (1 - this.currentBuf);
@@ -295,7 +234,7 @@ GPUGravityEngine.prototype.step = function() {
     var posNext = this.posTextures[next];
     var velNext = this.velTextures[next];
 
-    // Attendre que les shaders soient compilés avant le premier render()
+    // Attendre la compilation des shaders
     if (!velNext.isReady() || !posNext.isReady()) return;
 
     var N         = this.N;
@@ -303,234 +242,223 @@ GPUGravityEngine.prototype.step = function() {
     var limNewton = Math.max(0.0001, glo.lim_newton);
     var invG      = glo.mode.inv_g ? -1.0 : 1.0;
 
-    // Étape 1 : Nouvelles vitesses (force N-body sur GPU)
+    // 1. Nouvelles vitesses
     velNext.setTexture("positionTexture", posCur);
-    velNext.setTexture("velocityTexture", velCur);
-    velNext.setFloat("N", N);
-    velNext.setFloat("dt", dt);
-    velNext.setFloat("limNewton", limNewton);
-    velNext.setFloat("invG", invG);
-    velNext.setFloat("copyMode", 0.0);
+    velNext.setTexture("velocityTexture",  velCur);
+    velNext.setFloat("N",          N);
+    velNext.setFloat("dt",         dt);
+    velNext.setFloat("limNewton",  limNewton);
+    velNext.setFloat("invG",       invG);
+    velNext.setFloat("copyMode",   0.0);
     velNext.render();
 
-    // Étape 2 : Nouvelles positions (semi-implicit Euler)
+    // 2. Nouvelles positions (avec les nouvelles vitesses)
     posNext.setTexture("positionTexture", posCur);
-    posNext.setTexture("velocityTexture", velNext);
-    posNext.setFloat("N", N);
+    posNext.setTexture("velocityTexture",  velNext);
+    posNext.setFloat("N",  N);
     posNext.setFloat("dt", dt);
     posNext.render();
 
-    // Swap
     this.currentBuf = next;
 
-    // Après le premier step, on n'a plus besoin des RawTextures initiales
-    if (usingInit) {
+    if (usingInit && this.initPosTex) {
         this.initPosTex.dispose(); this.initPosTex = null;
         this.initVelTex.dispose(); this.initVelTex = null;
     }
 
-    // Mise à jour du matériau de rendu
-    if (this.shaderMaterial) {
-        this.shaderMaterial.setTexture("positionTexture", posNext);
-        this.shaderMaterial.setTexture("velocityTexture", velNext);
-        this.shaderMaterial.setFloat(
-            "speedScale",
-            1.0 / Math.max(0.001, glo.modulation * 0.005)
-        );
+    // Readback asynchrone → mise à jour du rendu
+    var self       = this;
+    var posBuf     = this._posReadBuf;
+    var velBuf     = this._velReadBuf;
+    var posPromise = posNext.readPixels(0, 0, posBuf, false);
+    var velPromise = velNext.readPixels(0, 0, velBuf, false);
+
+    if (posPromise && velPromise) {
+        Promise.all([posPromise, velPromise]).then(function(res) {
+            if (!self.initialized) return;
+            self._applyReadback(res[0], res[1]);
+        });
     }
 };
 
-// Crée le super mesh : N vertices à (0,0,0) + attribut particleIndex
-GPUGravityEngine.prototype._createSuperMesh = function() {
-    var N      = this.N;
-    var scene  = this.scene;
-    var engine = this.engine;
+// Applique les données GPU aux meshes de rendu
+GPUGravityEngine.prototype._applyReadback = function(posData, velData) {
+    if (!this.initialized) return;
 
-    // Tous les vertices à l'origine
-    // Le vertex shader les déplacera via la texture de positions
-    var positions      = new Float32Array(N * 3); // Tous à zéro
-    var indices        = [];
-    var particleIndices = new Float32Array(N);
+    var N          = this.N;
+    var speedScale = 1.0 / Math.max(0.001, glo.modulation * 0.005);
 
-    for (var i = 0; i < N; i++) {
-        indices.push(i);
-        particleIndices[i] = i;
-    }
+    var posF = (posData instanceof Float32Array) ? posData : new Float32Array(posData);
+    var velF = (velData instanceof Float32Array) ? velData : new Float32Array(velData);
 
-    var mesh       = new BABYLON.Mesh("gpuSuperMesh", scene);
-    var vertexData = new BABYLON.VertexData();
-    vertexData.positions = Array.from(positions);
-    vertexData.indices   = indices;
-    vertexData.applyToMesh(mesh, false);
-
-    // Attribut personnalisé : index de particule (1 float par vertex)
-    var piBuf = new BABYLON.VertexBuffer(
-        engine, particleIndices, "particleIndex",
-        false, // non-updatable
-        false, // non-instancedMesh
-        1      // stride = 1 float
-    );
-    mesh.setVerticesBuffer(piBuf);
-
-    this.superMesh = mesh;
-    this._createShaderMaterial();
-    mesh.material = this.shaderMaterial;
-};
-
-// Crée le matériau shader pour le rendu des particules
-GPUGravityEngine.prototype._createShaderMaterial = function() {
-    var mat = new BABYLON.ShaderMaterial(
-        "gpuParticleMat",
-        this.scene,
-        {
-            vertex:   "gpuGravParticle",
-            fragment: "gpuGravParticle"
-        },
-        {
-            attributes: ["position", "particleIndex"],
-            uniforms:   ["viewProjection", "N", "pointSize", "speedScale"],
-            samplers:   ["positionTexture", "velocityTexture"]
+    if (this.gpuMeshes && this.gpuMeshes.length > 0) {
+        // --- Mise à jour des meshes CPU existants ---
+        var list = this.gpuMeshes;
+        for (var i = 0; i < N; i++) {
+            var m = list[i];
+            if (!m) continue;
+            var x = posF[i*4], y = posF[i*4+1], z = posF[i*4+2];
+            m.virtual_x = x; m.virtual_y = y; m.virtual_z = z;
+            m.position.copyFromFloats(x, y, z);
+            m.z_vx    = velF[i*4];
+            m.z_vy    = velF[i*4+1];
+            m.z_vz    = velF[i*4+2];
+            m.vitesse = velF[i*4+3]; // |v| stocké dans le canal alpha
         }
-    );
+        // Coloriage basé sur la vitesse (fonction existante)
+        color(list);
 
-    // Rendu en points sprites
-    mat.pointsCloud     = true;
-    mat.backFaceCulling = false;
+    } else if (this.superMesh) {
+        // --- Mise à jour du super mesh points cloud ---
+        var meshPos = this.superMesh.getVerticesData(BABYLON.VertexBuffer.PositionKind);
+        var meshCol = this.superMesh.getVerticesData(BABYLON.VertexBuffer.ColorKind);
+        if (!meshPos || !meshCol) return;
 
-    // Mélange additif pour l'effet lumineux
-    mat.alphaMode = BABYLON.Engine.ALPHA_ADD;
+        for (var i = 0; i < N; i++) {
+            meshPos[i*3]   = posF[i*4];
+            meshPos[i*3+1] = posF[i*4+1];
+            meshPos[i*3+2] = posF[i*4+2];
 
-    // Uniforms initiaux
-    mat.setFloat("N",          this.N);
-    mat.setFloat("pointSize",  glo.gpu.pointSize);
-    mat.setFloat("speedScale", 1.0 / Math.max(0.001, glo.modulation * 0.005));
+            var c = _gpuSpeedToColor(velF[i*4+3] * speedScale);
+            meshCol[i*4]   = c.r;
+            meshCol[i*4+1] = c.g;
+            meshCol[i*4+2] = c.b;
+            meshCol[i*4+3] = 1.0;
+        }
 
-    // Textures courantes : RawTextures initiales avant le premier step()
-    var posTex = (this.currentBuf === -1) ? this.initPosTex : this.posTextures[this.currentBuf];
-    var velTex = (this.currentBuf === -1) ? this.initVelTex : this.velTextures[this.currentBuf];
-    mat.setTexture("positionTexture", posTex);
-    mat.setTexture("velocityTexture", velTex);
-
-    this.shaderMaterial = mat;
+        this.superMesh.updateVerticesData(BABYLON.VertexBuffer.PositionKind, meshPos);
+        this.superMesh.updateVerticesData(BABYLON.VertexBuffer.ColorKind,    meshCol);
+    }
 };
 
-// Met à jour les uniforms depuis glo (appelé si paramètres changent)
-GPUGravityEngine.prototype.updateUniforms = function() {
-    if (!this.shaderMaterial) return;
-    this.shaderMaterial.setFloat("pointSize", glo.gpu.pointSize);
-};
-
-// Libère toutes les ressources GPU
 GPUGravityEngine.prototype.dispose = function() {
-    if (this.superMesh)      { this.superMesh.dispose();      this.superMesh = null; }
-    if (this.shaderMaterial) { this.shaderMaterial.dispose(); this.shaderMaterial = null; }
-    if (this.initPosTex)     { this.initPosTex.dispose();     this.initPosTex = null; }
-    if (this.initVelTex)     { this.initVelTex.dispose();     this.initVelTex = null; }
+    if (this.superMesh)  { this.superMesh.dispose();  this.superMesh = null; }
+    if (this.initPosTex) { this.initPosTex.dispose(); this.initPosTex = null; }
+    if (this.initVelTex) { this.initVelTex.dispose(); this.initVelTex = null; }
     this.posTextures.forEach(function(t) { if (t) t.dispose(); });
     this.velTextures.forEach(function(t) { if (t) t.dispose(); });
     this.posTextures = [null, null];
     this.velTextures = [null, null];
+    this.gpuMeshes   = null;
     this.currentBuf  = -1;
     this.initialized = false;
 };
 
 // ============================================================
-// Génération des particules initiales
+// Dégradé de couleur CPU : bleu (lent) → rouge → blanc (rapide)
+// Même palette que l'ancien shader fragment
 // ============================================================
+function _gpuSpeedToColor(t) {
+    t = Math.max(0, Math.min(1, t));
+    var r, g, b;
+    if      (t < 0.2) { var f = t * 5;       r = 0; g = f * 0.5;       b = 1; }
+    else if (t < 0.4) { var f = (t-0.2)*5;   r = 0; g = 0.5+f*0.5;    b = 1-f; }
+    else if (t < 0.6) { var f = (t-0.4)*5;   r = f; g = 1;             b = 0; }
+    else if (t < 0.8) { var f = (t-0.6)*5;   r = 1; g = 1-f*0.7;      b = 0; }
+    else              { var f = (t-0.8)*5;   r = 1; g = 0.3+f*0.7;    b = f; }
+    return { r: r, g: g, b: b };
+}
 
-// Génère N particules distribuées aléatoirement dans une sphère
-// avec des vitesses tangentielles pour favoriser la rotation
+// ============================================================
+// Génération de particules initiales (sphère aléatoire)
+// ============================================================
 function generateGPUParticles(N, opts) {
-    opts    = opts    || {};
-    var radius     = opts.radius      !== undefined ? opts.radius      : glo.gpu.radius;
-    var mass       = opts.mass        !== undefined ? opts.mass        : glo.masse_particules;
-    var massVar    = opts.massVar     !== undefined ? opts.massVar     : glo.var_masse;
-    var initSpeed  = opts.initialSpeed !== undefined ? opts.initialSpeed : glo.gpu.initialSpeed;
-    var particles  = [];
+    opts = opts || {};
+    var radius    = opts.radius       !== undefined ? opts.radius       : glo.gpu.radius;
+    var mass      = opts.mass         !== undefined ? opts.mass         : glo.masse_particules;
+    var massVar   = opts.massVar      !== undefined ? opts.massVar      : glo.var_masse;
+    var initSpeed = opts.initialSpeed !== undefined ? opts.initialSpeed : glo.gpu.initialSpeed;
+    var particles = [];
 
     for (var i = 0; i < N; i++) {
-        // Position uniforme dans la sphère (méthode rejet)
         var theta = Math.random() * 2 * Math.PI;
         var phi   = Math.acos(2 * Math.random() - 1);
-        var r     = radius * Math.pow(Math.random(), 1.0 / 3.0);
-
+        var r     = radius * Math.pow(Math.random(), 1.0/3.0);
         var x = r * Math.sin(phi) * Math.cos(theta);
         var y = r * Math.sin(phi) * Math.sin(theta);
         var z = r * Math.cos(phi);
 
-        // Masse avec variation
         var m = mass * (1 + (Math.random() - 0.5) * massVar * 0.5);
         m = Math.max(0.001, m);
 
-        // Vitesse initiale aléatoire
-        var vx = (Math.random() - 0.5) * initSpeed;
-        var vy = (Math.random() - 0.5) * initSpeed;
-        var vz = (Math.random() - 0.5) * initSpeed;
-
-        particles.push({ x: x, y: y, z: z, mass: m, vx: vx, vy: vy, vz: vz });
+        particles.push({
+            x: x, y: y, z: z, mass: m,
+            vx: (Math.random()-0.5)*initSpeed,
+            vy: (Math.random()-0.5)*initSpeed,
+            vz: (Math.random()-0.5)*initSpeed
+        });
     }
-
     return particles;
 }
 
 // ============================================================
 // Instance globale + contrôle du mode GPU
 // ============================================================
-
 var gpuGravityEngine = null;
 
-// Active le mode GPU : cache les meshes CPU et crée le super mesh
+// Active le mode GPU.
+// Si des meshes CPU existent (formes ajoutées via l'UI),
+// on les utilise comme conditions initiales ET comme rendu.
+// Sinon, un super mesh points cloud est créé.
 function initGPUMode() {
     if (!glo.scene) return;
 
-    // Masquer les meshes CPU existants
-    for (var i = 0; i < meshes.length; i++) {
-        meshes[i].isVisible = false;
+    var initialParticles, gpuMeshes;
+
+    if (meshes.length > 0) {
+        // Lire les conditions initiales depuis les meshes existants
+        var n = Math.min(meshes.length, GPU_MAX_PARTICLES);
+        initialParticles = [];
+        for (var i = 0; i < n; i++) {
+            var m = meshes[i];
+            initialParticles.push({
+                x:    m.virtual_x !== undefined ? m.virtual_x : (m.position ? m.position.x : 0),
+                y:    m.virtual_y !== undefined ? m.virtual_y : (m.position ? m.position.y : 0),
+                z:    m.virtual_z !== undefined ? m.virtual_z : (m.position ? m.position.z : 0),
+                mass: m.z_masse   || glo.masse_particules,
+                vx:   m.z_vx      || 0,
+                vy:   m.z_vy      || 0,
+                vz:   m.z_vz      || 0
+            });
+        }
+        // Passer les meshes existants : GPU pilote leur position
+        gpuMeshes = meshes.slice(0, n);
+    } else {
+        // Aucun mesh : générer des particules + super mesh
+        var n = Math.min(glo.gpu.N, GPU_MAX_PARTICLES);
+        initialParticles = generateGPUParticles(n);
+        gpuMeshes = null;
     }
 
-    // Créer ou réinitialiser le moteur GPU
     if (!gpuGravityEngine) {
-        gpuGravityEngine = new GPUGravityEngine(
-            glo.scene, glo.scene.getEngine()
-        );
+        gpuGravityEngine = new GPUGravityEngine(glo.scene, glo.scene.getEngine());
     } else {
         gpuGravityEngine.dispose();
     }
 
-    var n         = Math.min(glo.gpu.N, GPU_MAX_PARTICLES);
-    var particles = generateGPUParticles(n);
-    gpuGravityEngine.init(particles);
-
+    gpuGravityEngine.init(initialParticles, gpuMeshes);
     glo.mode.gpu = true;
-    console.log("[GPU] Mode GPU activé — " + n + " particules");
+    console.log("[GPU] Mode GPU activé — " + initialParticles.length + " particules");
 }
 
-// Désactive le mode GPU et restaure les meshes CPU
 function stopGPUMode() {
     glo.mode.gpu = false;
     if (gpuGravityEngine) {
         gpuGravityEngine.dispose();
     }
+    // Restaurer la visibilité des meshes CPU si nécessaire
     for (var i = 0; i < meshes.length; i++) {
         meshes[i].isVisible = true;
     }
     console.log("[GPU] Mode GPU désactivé");
 }
 
-// Bascule le mode GPU (touche 'G')
 function toggleGPUMode() {
-    if (glo.mode.gpu) {
-        stopGPUMode();
-    } else {
-        initGPUMode();
-    }
+    if (glo.mode.gpu) { stopGPUMode(); } else { initGPUMode(); }
 }
 
-// Écoute de la touche 'G' pour activer/désactiver le mode GPU
 window.addEventListener("keydown", function(e) {
-    if (e.key === "g" || e.key === "G") {
-        if (!e.ctrlKey && !e.altKey && !e.metaKey) {
-            toggleGPUMode();
-        }
+    if ((e.key === "g" || e.key === "G") && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        toggleGPUMode();
     }
 });
