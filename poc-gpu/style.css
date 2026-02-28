@@ -1,4 +1,7 @@
-* {
+/* ============================================================
+   Reset & base
+   ============================================================ */
+*, *::before, *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -9,21 +12,211 @@ html, body {
   height: 100%;
   background: #000;
   overflow: hidden;
+  font-family: monospace;
 }
 
+/* ============================================================
+   Canvas — plein écran sous tout le reste
+   ============================================================ */
 #c {
+  position: fixed;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
 }
 
+/* ============================================================
+   HUD — coin supérieur gauche
+   ============================================================ */
 #hud {
   position: fixed;
   top: 14px;
   left: 18px;
-  font: 13px/1.6 monospace;
-  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.35);
   pointer-events: none;
   user-select: none;
   white-space: pre;
+}
+
+/* ============================================================
+   Panneau latéral droit
+   ============================================================ */
+#panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 210px;
+  height: 100%;
+  background: rgba(6, 6, 10, 0.85);
+  backdrop-filter: blur(12px);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+}
+
+.panel-section {
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.section-title {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 12px;
+}
+
+/* ============================================================
+   Lignes de slider
+   ============================================================ */
+.slider-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 38px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.slider-row:last-child {
+  margin-bottom: 0;
+}
+
+.slider-row label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+  text-align: right;
+}
+
+.slider-row .val {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  text-align: right;
+}
+
+/* ============================================================
+   Sliders — style dark
+   ============================================================ */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 1px;
+  outline: none;
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #4aa8ff;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  background: #7dc4ff;
+  transform: scale(1.2);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #4aa8ff;
+  border: none;
+  cursor: pointer;
+}
+
+/* Slider Vx/Vy/Vz : accent différent pour les vitesses */
+#sVx::-webkit-slider-thumb,
+#sVy::-webkit-slider-thumb,
+#sVz::-webkit-slider-thumb { background: #ff8c42; }
+
+#sVx::-webkit-slider-thumb:hover,
+#sVy::-webkit-slider-thumb:hover,
+#sVz::-webkit-slider-thumb:hover { background: #ffb07a; }
+
+#sVx::-moz-range-thumb,
+#sVy::-moz-range-thumb,
+#sVz::-moz-range-thumb { background: #ff8c42; }
+
+/* ============================================================
+   Barre de comptage de particules
+   ============================================================ */
+.count-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.count-track {
+  flex: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.count-fill {
+  height: 100%;
+  width: 0%;
+  background: #4aa8ff;
+  border-radius: 2px;
+  transition: width 0.2s;
+}
+
+/* ============================================================
+   Hints
+   ============================================================ */
+.hints {
+  flex: 1;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.22);
+  line-height: 1.9;
+}
+
+.hints b {
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: normal;
+}
+
+/* ============================================================
+   Bouton reset
+   ============================================================ */
+#btnReset {
+  margin: 0;
+  padding: 12px 0;
+  background: transparent;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.3);
+  font-family: monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  width: 100%;
+}
+
+#btnReset:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+#btnReset:active {
+  background: rgba(255, 255, 255, 0.08);
 }

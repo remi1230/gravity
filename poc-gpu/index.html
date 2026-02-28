@@ -5,10 +5,65 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GPU Gravity — PoC</title>
   <link rel="stylesheet" href="style.css">
+  <script src="index.js" defer></script>
 </head>
 <body>
+
   <canvas id="c"></canvas>
+
+  <!-- HUD performance (coin supérieur gauche) -->
   <div id="hud"></div>
-  <script src="index.js"></script>
+
+  <!-- Panneau de contrôle -->
+  <aside id="panel">
+
+    <div class="panel-section">
+      <div class="section-title">Nouvelle particule</div>
+
+      <div class="slider-row">
+        <label for="sMass">Masse</label>
+        <input type="range" id="sMass" min="0.1" max="200" step="0.1" value="1">
+        <span class="val" id="vMass">1.0</span>
+      </div>
+
+      <div class="slider-row">
+        <label for="sVx">Vx</label>
+        <input type="range" id="sVx" min="-10" max="10" step="0.1" value="0">
+        <span class="val" id="vVx">0.0</span>
+      </div>
+
+      <div class="slider-row">
+        <label for="sVy">Vy</label>
+        <input type="range" id="sVy" min="-10" max="10" step="0.1" value="0">
+        <span class="val" id="vVy">0.0</span>
+      </div>
+
+      <div class="slider-row">
+        <label for="sVz">Vz</label>
+        <input type="range" id="sVz" min="-10" max="10" step="0.1" value="0">
+        <span class="val" id="vVz">0.0</span>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-title">Particules</div>
+      <div id="count" class="count-bar">
+        <span id="countNum">0</span>
+        <div class="count-track"><div id="countFill" class="count-fill"></div></div>
+        <span id="countMax">0</span>
+      </div>
+    </div>
+
+    <div class="panel-section hints">
+      <div>· <b>Clic</b> → poser une particule</div>
+      <div>· <b>Glisser</b> → orbiter la caméra</div>
+      <div>· <b>Molette</b> → zoom</div>
+    </div>
+
+    <button id="btnReset">Réinitialiser</button>
+
+  </aside>
+
 </body>
+
 </html>

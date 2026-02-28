@@ -1,17 +1,18 @@
 "use strict";
 
 // =============================================================
-//  CONFIG — modifier ces valeurs pour les tests
+//  CONFIG — modifier ces valeurs pour les tests de performance
 // =============================================================
 
-var N          = 256;    // Nombre de particules (changer et recharger)
-var MASS       = 1.0;    // Masse de chaque particule
+var N          = 12000;    // Nombre de particules initiales
+var MAX_N      = 24000;   // Maximum total (borne fixe dans les shaders)
+var MASS       = 0.001;    // Masse par défaut
 var G          = 1.0;    // Constante gravitationnelle
 var DT         = 0.016;  // Pas de temps
-var SOFTENING  = 0.5;    // Adoucissement (évite la division par zéro)
+var SOFTENING  = 0.5;    // Adoucissement (évite la singularité à dist=0)
 var POINT_SIZE = 3.0;    // Taille des points en pixels
-var RADIUS     = 8.0;    // Rayon de la distribution initiale (sphère)
-var INIT_SPEED = 0.0;    // Vitesse initiale (0 = repos)
+var RADIUS     = 8.0;    // Rayon de la distribution initiale
+var INIT_SPEED = 0.0;    // Vitesse initiale (0 = au repos)
 
 // =============================================================
 //  CANVAS + WEBGL 2
@@ -25,9 +26,8 @@ if (!gl) {
     throw new Error("WebGL2 non disponible");
 }
 
-// Nécessaire pour rendre dans des textures RGBA32F
 if (!gl.getExtension("EXT_color_buffer_float")) {
-    console.warn("[GPU] EXT_color_buffer_float non disponible — risque d'erreur FBO");
+    console.warn("[GPU] EXT_color_buffer_float non disponible");
 }
 
 function resize() {
@@ -39,67 +39,66 @@ window.addEventListener("resize", resize);
 resize();
 
 // =============================================================
-//  LAYOUT DES TEXTURES
-//  Les N particules sont stockées dans une texture carrée.
-//  Particule i → pixel (i % TEX, i / TEX)
+//  LAYOUT TEXTURE
+//  Les N particules tiennent dans une texture carrée TEX×TEX.
+//  Particule i → pixel (i % TEX, floor(i / TEX))
+//  TEX est dimensionné pour MAX_N afin de permettre l'ajout.
 // =============================================================
 
-var TEX = Math.ceil(Math.sqrt(N));  // Côté de la texture en pixels
+var TEX = Math.ceil(Math.sqrt(MAX_N));
 
 // =============================================================
 //  SHADERS GLSL ES 3.0
 // =============================================================
 
-// Vertex shader partagé pour les quads de physique GPGPU.
-// layout(location=0) garantit que l'attribut est toujours à l'emplacement 0.
+// Vertex shader partagé pour les quads GPGPU (physique).
+// layout(location=0) : même emplacement pour tous les programmes.
 var QUAD_VS = `#version 300 es
 layout(location = 0) in vec2 aPos;
-void main() {
-    gl_Position = vec4(aPos, 0.0, 1.0);
-}`;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
 
-// Fragment shader — mise à jour des VITESSES
-// Pour chaque particule i : somme des forces gravitationnelles de toutes les j ≠ i.
-// La borne de la boucle est injectée comme constante GLSL via le template JS (${N}).
+// Mise à jour des VITESSES — N-body O(n²)
+// La borne de boucle ${MAX_N} est une constante GLSL (compilée).
+// uN est le nombre réel de particules actives (uniform dynamique).
 var VEL_FS = `#version 300 es
 precision highp float;
 precision highp sampler2D;
 
-uniform sampler2D uPos;     // RGBA : x  y  z  masse
-uniform sampler2D uVel;     // RGBA : vx vy vz |v|
-uniform int       uTex;     // Côté de la texture
+uniform sampler2D uPos;   // RGBA : x  y  z  masse
+uniform sampler2D uVel;   // RGBA : vx vy vz |v|
+uniform int       uTex;   // côté de la texture
+uniform int       uN;     // nombre de particules actives
 uniform float     uG;
 uniform float     uDT;
-uniform float     uSoft;    // Adoucissement
+uniform float     uSoft;
 
 out vec4 outColor;
 
 void main() {
     ivec2 c = ivec2(gl_FragCoord.xy);
     int   i = c.y * uTex + c.x;
-    if (i >= ${N}) { outColor = vec4(0.0); return; }
+    if (i >= uN) { outColor = vec4(0.0); return; }
 
     vec4 p   = texelFetch(uPos, c, 0);
     vec4 v   = texelFetch(uVel, c, 0);
     vec3 acc = vec3(0.0);
 
-    for (int j = 0; j < ${N}; j++) {
-        if (j == i) continue;
+    for (int j = 0; j < ${MAX_N}; j++) {
+        if (j >= uN) break;
+        if (j == i)  continue;
         ivec2 jc   = ivec2(j % uTex, j / uTex);
         vec4  pj   = texelFetch(uPos, jc, 0);
         vec3  d    = pj.xyz - p.xyz;
         float r2   = dot(d, d) + uSoft * uSoft;
-        float inv  = inversesqrt(r2);   // 1 / sqrt(r²)
-        float inv3 = inv * inv * inv;   // 1 / r³
-        acc += d * pj.w * inv3 * uG;
+        float inv  = inversesqrt(r2);
+        acc += d * pj.w * inv * inv * inv * uG;
     }
 
     vec3 nv  = v.xyz + acc * uDT;
-    outColor = vec4(nv, length(nv));    // alpha = |v| (vitesse scalaire)
+    outColor = vec4(nv, length(nv));   // alpha = |v|
 }`;
 
-// Fragment shader — mise à jour des POSITIONS
-// newPos = oldPos + newVel * dt
+// Mise à jour des POSITIONS — intégration Euler
 var POS_FS = `#version 300 es
 precision highp float;
 precision highp sampler2D;
@@ -107,6 +106,7 @@ precision highp sampler2D;
 uniform sampler2D uPos;
 uniform sampler2D uVel;
 uniform int       uTex;
+uniform int       uN;
 uniform float     uDT;
 
 out vec4 outColor;
@@ -114,16 +114,16 @@ out vec4 outColor;
 void main() {
     ivec2 c = ivec2(gl_FragCoord.xy);
     int   i = c.y * uTex + c.x;
-    if (i >= ${N}) { outColor = vec4(0.0); return; }
+    if (i >= uN) { outColor = vec4(0.0); return; }
 
     vec4 p   = texelFetch(uPos, c, 0);
     vec4 v   = texelFetch(uVel, c, 0);
     outColor = vec4(p.xyz + v.xyz * uDT, p.w);  // w = masse (inchangée)
 }`;
 
-// Vertex shader de rendu
-// gl_VertexID donne l'index de la particule → lookup dans la texture de positions.
-// Aucun vertex buffer nécessaire pour les positions.
+// Vertex shader de rendu.
+// gl_VertexID → index particule → lookup texelFetch dans uPos.
+// Aucun vertex buffer de positions nécessaire.
 var RENDER_VS = `#version 300 es
 precision highp float;
 precision highp sampler2D;
@@ -142,14 +142,14 @@ void main() {
     vec4  p = texelFetch(uPos, c, 0);
     vec4  v = texelFetch(uVel, c, 0);
 
-    vSpeed       = v.w;                              // |v| (canal alpha)
+    vSpeed       = v.w;
     gl_Position  = uMVP * vec4(p.xyz, 1.0);
     gl_PointSize = uPointSize;
 }`;
 
-// Fragment shader de rendu
-// Dégradé de couleur selon la vitesse : bleu (lent) → rouge → blanc (rapide)
-// Chaque point est rendu comme un disque (les coins sont écartés).
+// Fragment shader de rendu.
+// Dégradé bleu (lent) → cyan → vert → orange → blanc (rapide).
+// Points rendus comme des disques (coins écartés).
 var RENDER_FS = `#version 300 es
 precision highp float;
 
@@ -159,25 +159,24 @@ uniform float uMaxSpeed;
 out vec4 outColor;
 
 void main() {
-    // Discard les coins → cercle parfait
     vec2 uv = gl_PointCoord * 2.0 - 1.0;
     if (dot(uv, uv) > 1.0) discard;
 
     float t = clamp(vSpeed / max(uMaxSpeed, 0.001), 0.0, 1.0);
-    vec3  c;
+    
+    vec3 c;
     if      (t < 0.25) { float f = t * 4.0;        c = mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), f); }
-    else if (t < 0.50) { float f = (t - 0.25)*4.0; c = mix(vec3(0.0, 1.0, 1.0), vec3(0.0, 1.0, 0.0), f); }
-    else if (t < 0.75) { float f = (t - 0.50)*4.0; c = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.5, 0.0), f); }
-    else               { float f = (t - 0.75)*4.0; c = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 1.0, 1.0), f); }
+    else if (t < 0.50) { float f = (t-0.25)*4.0;   c = mix(vec3(0.0, 1.0, 1.0), vec3(0.0, 1.0, 0.0), f); }
+    else if (t < 0.75) { float f = (t-0.50)*4.0;   c = mix(vec3(0.0, 1.0, 0.0), vec3(1.0, 0.5, 0.0), f); }
+    else               { float f = (t-0.75)*4.0;   c = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 1.0, 1.0), f); }
 
     outColor = vec4(c, 1.0);
 }`;
 
 // =============================================================
-//  MATHS — matrices 4×4 column-major (convention WebGL/OpenGL)
+//  MATHS — matrices 4×4 column-major (convention OpenGL/WebGL)
 // =============================================================
 
-// Projection perspective standard
 function mat4Perspective(fovY, aspect, near, far) {
     var f  = 1.0 / Math.tan(fovY * 0.5);
     var nf = 1.0 / (near - far);
@@ -189,42 +188,36 @@ function mat4Perspective(fovY, aspect, near, far) {
     ]);
 }
 
-// LookAt (up fixe = Y)
-function mat4LookAt(ex, ey, ez, tx, ty, tz) {
-    // forward = normalize(target - eye)
-    var fx = tx - ex, fy = ty - ey, fz = tz - ez;
-    var fl = Math.sqrt(fx*fx + fy*fy + fz*fz);
-    fx /= fl; fy /= fl; fz /= fl;
-
-    // right = normalize(forward × up)  où up = (0,1,0)
-    // (f.x, f.y, f.z) × (0,1,0) = (-f.z, 0, f.x)
-    var sx = -fz, sy = 0, sz = fx;
-    var sl = Math.sqrt(sx*sx + sz*sz);
-    if (sl < 1e-10) { sx = 1; sz = 0; } else { sx /= sl; sz /= sl; }
-
-    // corrected up = right × forward (= s × f, puisque f = forward ici)
-    var ux = sy * fz - sz * fy;
-    var uy = sz * fx - sx * fz;
-    var uz = sx * fy - sy * fx;
-
+// LookAt avec up fixe = (0,1,0), cible = origine
+function mat4LookAt(ex, ey, ez) {
+    var d  = Math.sqrt(ex*ex + ey*ey + ez*ez);
+    // forward = normalize(-eye)
+    var fx = -ex/d, fy = -ey/d, fz = -ez/d;
+    // right = forward × up = (-fz, 0, fx), puis normaliser
+    var rx = -fz, rz = fx;
+    var rl = Math.sqrt(rx*rx + rz*rz);
+    if (rl > 1e-10) { rx /= rl; rz /= rl; }
+    // corrected up = right × forward  (ry = 0)
+    var ux = -rz * fy;
+    var uy =  rz * fx - rx * fz;
+    var uz =  rx * fy;
     return new Float32Array([
-        sx,  ux, -fx, 0,
-        sy,  uy, -fy, 0,
-        sz,  uz, -fz, 0,
-        -(sx*ex + sy*ey + sz*ez),
+        rx, ux, -fx, 0,
+        0,  uy, -fy, 0,   // ry=0, sy=0
+        rz, uz, -fz, 0,
+        -(rx*ex + rz*ez),
         -(ux*ex + uy*ey + uz*ez),
           (fx*ex + fy*ey + fz*ez),
         1
     ]);
 }
 
-// Multiplication de deux matrices 4×4 column-major : résultat = a * b
 function mat4Mul(a, b) {
     var r = new Float32Array(16);
     for (var col = 0; col < 4; col++)
         for (var row = 0; row < 4; row++)
             for (var k = 0; k < 4; k++)
-                r[row + col * 4] += a[row + k * 4] * b[k + col * 4];
+                r[row + col*4] += a[row + k*4] * b[k + col*4];
     return r;
 }
 
@@ -251,17 +244,11 @@ function createProgram(vsSrc, fsSrc) {
     return p;
 }
 
-// Texture RGBA32F (float 32 bits par canal)
-// data : Float32Array de taille TEX*TEX*4, ou null (texture vide)
+// Texture RGBA32F — data: Float32Array TEX*TEX*4, ou null
 function createFloat32Tex(data) {
     var t = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, t);
-    gl.texImage2D(
-        gl.TEXTURE_2D, 0, gl.RGBA32F,
-        TEX, TEX, 0,
-        gl.RGBA, gl.FLOAT,
-        data || null
-    );
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, TEX, TEX, 0, gl.RGBA, gl.FLOAT, data || null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -270,7 +257,6 @@ function createFloat32Tex(data) {
     return t;
 }
 
-// FBO attaché à une texture RGBA32F (pour le rendu GPGPU)
 function createFBO(tex) {
     var fb = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
@@ -282,26 +268,18 @@ function createFBO(tex) {
     return fb;
 }
 
-// VAO pour un quad plein-écran [-1,1]² (2 triangles en triangle strip)
-// Attribut fixé à location 0 → compatible avec tous les programmes physique
 function createQuadVAO() {
     var vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
     var buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-        -1, -1,
-         1, -1,
-        -1,  1,
-         1,  1
-    ]), gl.STATIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
     gl.bindVertexArray(null);
     return vao;
 }
 
-// VAO vide pour le rendu des particules (positions via gl_VertexID)
 function createEmptyVAO() {
     var vao = gl.createVertexArray();
     gl.bindVertexArray(vao);
@@ -314,24 +292,20 @@ function createEmptyVAO() {
 // =============================================================
 
 function initParticles() {
-    // TEX*TEX texels par texture, 4 floats par texel
-    var posData = new Float32Array(TEX * TEX * 4);
+    var posData = new Float32Array(TEX * TEX * 4);  // tout à 0 par défaut
     var velData = new Float32Array(TEX * TEX * 4);
-
     for (var i = 0; i < N; i++) {
         var theta = Math.random() * 2 * Math.PI;
         var phi   = Math.acos(2 * Math.random() - 1);
-        var r     = RADIUS * Math.pow(Math.random(), 1.0 / 3.0); // distribution volumique
-
-        posData[i * 4 + 0] = r * Math.sin(phi) * Math.cos(theta); // x
-        posData[i * 4 + 1] = r * Math.sin(phi) * Math.sin(theta); // y
-        posData[i * 4 + 2] = r * Math.cos(phi);                   // z
-        posData[i * 4 + 3] = MASS;                                 // masse
-
-        velData[i * 4 + 0] = (Math.random() - 0.5) * INIT_SPEED;  // vx
-        velData[i * 4 + 1] = (Math.random() - 0.5) * INIT_SPEED;  // vy
-        velData[i * 4 + 2] = (Math.random() - 0.5) * INIT_SPEED;  // vz
-        velData[i * 4 + 3] = 0;                                    // |v|
+        var r     = RADIUS * Math.pow(Math.random(), 1.0/3.0);
+        posData[i*4+0] = r * Math.sin(phi) * Math.cos(theta);
+        posData[i*4+1] = r * Math.sin(phi) * Math.sin(theta);
+        posData[i*4+2] = r * Math.cos(phi);
+        posData[i*4+3] = MASS;
+        velData[i*4+0] = (Math.random() - 0.5) * INIT_SPEED;
+        velData[i*4+1] = (Math.random() - 0.5) * INIT_SPEED;
+        velData[i*4+2] = (Math.random() - 0.5) * INIT_SPEED;
+        velData[i*4+3] = 0;
     }
     return { pos: posData, vel: velData };
 }
@@ -346,12 +320,12 @@ var renderProg = createProgram(RENDER_VS, RENDER_FS);
 var quadVAO    = createQuadVAO();
 var renderVAO  = createEmptyVAO();
 
-// Uniform locations — pré-cachées pour éviter les lookups dans la boucle
 var uLoc = {
     vel: {
         pos:  gl.getUniformLocation(velProg, "uPos"),
         vel:  gl.getUniformLocation(velProg, "uVel"),
         tex:  gl.getUniformLocation(velProg, "uTex"),
+        N:    gl.getUniformLocation(velProg, "uN"),
         G:    gl.getUniformLocation(velProg, "uG"),
         dt:   gl.getUniformLocation(velProg, "uDT"),
         soft: gl.getUniformLocation(velProg, "uSoft"),
@@ -360,6 +334,7 @@ var uLoc = {
         pos:  gl.getUniformLocation(posProg, "uPos"),
         vel:  gl.getUniformLocation(posProg, "uVel"),
         tex:  gl.getUniformLocation(posProg, "uTex"),
+        N:    gl.getUniformLocation(posProg, "uN"),
         dt:   gl.getUniformLocation(posProg, "uDT"),
     },
     ren: {
@@ -376,51 +351,172 @@ var uLoc = {
 //  TEXTURES + FBOs (ping-pong)
 // =============================================================
 
-var particles = initParticles();
-var posTex    = [createFloat32Tex(particles.pos), createFloat32Tex(null)];
-var velTex    = [createFloat32Tex(particles.vel), createFloat32Tex(null)];
-var posFBO    = [createFBO(posTex[0]), createFBO(posTex[1])];
-var velFBO    = [createFBO(velTex[0]), createFBO(velTex[1])];
-var cur       = 0;  // index du buffer courant (0 ou 1)
+var particles    = initParticles();
+var posTex       = [createFloat32Tex(particles.pos), createFloat32Tex(null)];
+var velTex       = [createFloat32Tex(particles.vel), createFloat32Tex(null)];
+var posFBO       = [createFBO(posTex[0]), createFBO(posTex[1])];
+var velFBO       = [createFBO(velTex[0]), createFBO(velTex[1])];
+var cur          = 0;
+var numParticles = N;
 
 // =============================================================
 //  CAMERA — orbite souris + scroll
+//  Séparation clic / glisser : < 5px mouvement = clic → pose
 // =============================================================
 
 var cam = { theta: 0.4, phi: 0.3, dist: 20.0 };
 
 (function() {
-    var drag = false, mx = 0, my = 0;
+    var dragging = false;
+    var startX = 0, startY = 0;
+    var lastX  = 0, lastY  = 0;
+    var DRAG_THRESHOLD = 5; // pixels
 
     canvas.addEventListener("mousedown", function(e) {
-        drag = true; mx = e.clientX; my = e.clientY;
+        dragging = true;
+        startX = lastX = e.clientX;
+        startY = lastY = e.clientY;
     });
-    window.addEventListener("mouseup", function() { drag = false; });
+
     window.addEventListener("mousemove", function(e) {
-        if (!drag) return;
-        cam.theta -= (e.clientX - mx) * 0.005;
-        cam.phi   -= (e.clientY - my) * 0.005;
+        if (!dragging) return;
+        cam.theta -= (e.clientX - lastX) * 0.005;
+        cam.phi   += (e.clientY - lastY) * 0.005;
         cam.phi    = Math.max(-1.55, Math.min(1.55, cam.phi));
-        mx = e.clientX; my = e.clientY;
+        lastX = e.clientX;
+        lastY = e.clientY;
     });
+
+    // Mouseup sur le canvas : distinguer clic et glisser
+    canvas.addEventListener("mouseup", function(e) {
+        if (!dragging) return;
+        var dx = e.clientX - startX;
+        var dy = e.clientY - startY;
+        if (Math.sqrt(dx*dx + dy*dy) < DRAG_THRESHOLD) {
+            placeParticle(e.clientX, e.clientY);
+        }
+        dragging = false;
+    });
+
+    // Mouseup hors canvas (fin de drag sans placement)
+    window.addEventListener("mouseup", function() { dragging = false; });
+
     canvas.addEventListener("wheel", function(e) {
         cam.dist *= 1 + e.deltaY * 0.001;
-        cam.dist  = Math.max(1, Math.min(500, cam.dist));
+        cam.dist  = Math.max(0.5, Math.min(500, cam.dist));
         e.preventDefault();
     }, { passive: false });
 })();
 
+function getCamPos() {
+    return {
+        x: cam.dist * Math.cos(cam.phi) * Math.sin(cam.theta),
+        y: cam.dist * Math.sin(cam.phi),
+        z: cam.dist * Math.cos(cam.phi) * Math.cos(cam.theta)
+    };
+}
+
 function getMVP() {
-    var ex = cam.dist * Math.cos(cam.phi) * Math.sin(cam.theta);
-    var ey = cam.dist * Math.sin(cam.phi);
-    var ez = cam.dist * Math.cos(cam.phi) * Math.cos(cam.theta);
-    var view = mat4LookAt(ex, ey, ez, 0, 0, 0);
+    var c    = getCamPos();
+    var view = mat4LookAt(c.x, c.y, c.z);
     var proj = mat4Perspective(Math.PI / 3, canvas.width / canvas.height, 0.01, 10000);
     return mat4Mul(proj, view);
 }
 
 // =============================================================
-//  PAS DE PHYSIQUE GPU
+//  PICKING 3D — rayon caméra → point monde
+//
+//  Pour placer une particule : on trace un rayon depuis la
+//  caméra à travers le pixel cliqué, et on trouve le point du
+//  rayon le plus proche de l'origine (centre de la scène).
+// =============================================================
+
+function getRay(screenX, screenY) {
+    var ndcX = (screenX / canvas.width)  * 2.0 - 1.0;
+    var ndcY = 1.0 - (screenY / canvas.height) * 2.0;
+
+    var c = getCamPos();
+    var ex = c.x, ey = c.y, ez = c.z;
+
+    // forward = normalize(origine - œil)
+    var d  = cam.dist;
+    var fx = -ex/d, fy = -ey/d, fz = -ez/d;
+
+    // right = forward × up(0,1,0) = (-fz, 0, fx), normalisé
+    var rx = -fz, rz = fx;
+    var rl = Math.sqrt(rx*rx + rz*rz);
+    if (rl > 1e-10) { rx /= rl; rz /= rl; }
+
+    // corrected up = right × forward  (ry=0)
+    var ux = -rz * fy;
+    var uy =  rz * fx - rx * fz;
+    var uz =  rx * fy;
+
+    // Direction du rayon en espace monde
+    var h      = Math.tan(Math.PI / 6);   // tan(fovY/2) avec fovY=60°
+    var aspect = canvas.width / canvas.height;
+    var dirx   = fx + ndcX * h * aspect * rx + ndcY * h * ux;
+    var diry   = fy                           + ndcY * h * uy;  // rx=0 pour ry
+    var dirz   = fz + ndcX * h * aspect * rz + ndcY * h * uz;
+    var dirl   = Math.sqrt(dirx*dirx + diry*diry + dirz*dirz);
+
+    return {
+        ox: ex,        oy: ey,        oz: ez,
+        dx: dirx/dirl, dy: diry/dirl, dz: dirz/dirl
+    };
+}
+
+// Point du rayon le plus proche de l'origine
+function closestToOrigin(ray) {
+    var t = Math.max(0, -(ray.ox*ray.dx + ray.oy*ray.dy + ray.oz*ray.dz));
+    return [
+        ray.ox + t * ray.dx,
+        ray.oy + t * ray.dy,
+        ray.oz + t * ray.dz
+    ];
+}
+
+// =============================================================
+//  AJOUT DE PARTICULE
+// =============================================================
+
+// Écriture d'un unique texel dans la texture courante via texSubImage2D.
+// Nul besoin de lire ou re-uploader la texture entière.
+function addParticle(x, y, z, mass, vx, vy, vz) {
+    if (numParticles >= MAX_N) return;
+
+    var i  = numParticles;
+    var px = i % TEX;
+    var py = Math.floor(i / TEX);
+
+    gl.bindTexture(gl.TEXTURE_2D, posTex[cur]);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, px, py, 1, 1,
+        gl.RGBA, gl.FLOAT,
+        new Float32Array([x, y, z, mass]));
+
+    gl.bindTexture(gl.TEXTURE_2D, velTex[cur]);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, px, py, 1, 1,
+        gl.RGBA, gl.FLOAT,
+        new Float32Array([vx, vy, vz, Math.sqrt(vx*vx + vy*vy + vz*vz)]));
+
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    numParticles++;
+    updateCount();
+}
+
+// Lit les sliders du panel et pose la particule à la position 3D cliquée
+function placeParticle(screenX, screenY) {
+    var pos  = closestToOrigin(getRay(screenX, screenY));
+    var mass = parseFloat(document.getElementById("sMass").value);
+    var vx   = parseFloat(document.getElementById("sVx").value);
+    var vy   = parseFloat(document.getElementById("sVy").value);
+    var vz   = parseFloat(document.getElementById("sVz").value);
+    addParticle(pos[0], pos[1], pos[2], mass, vx, vy, vz);
+}
+
+// =============================================================
+//  PHYSIQUE GPU — un pas de simulation
 // =============================================================
 
 function physicsStep() {
@@ -436,12 +532,13 @@ function physicsStep() {
     gl.uniform1i(uLoc.vel.pos,  0);
     gl.uniform1i(uLoc.vel.vel,  1);
     gl.uniform1i(uLoc.vel.tex,  TEX);
+    gl.uniform1i(uLoc.vel.N,    numParticles);
     gl.uniform1f(uLoc.vel.G,    G);
     gl.uniform1f(uLoc.vel.dt,   DT);
     gl.uniform1f(uLoc.vel.soft, SOFTENING);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-    // 2. Nouvelles positions → posTex[nxt]  (on utilise les vitesses fraîchement calculées)
+    // 2. Nouvelles positions → posTex[nxt]  (lit les vitesses fraîches)
     gl.bindFramebuffer(gl.FRAMEBUFFER, posFBO[nxt]);
     gl.useProgram(posProg);
     gl.bindVertexArray(quadVAO);
@@ -450,6 +547,7 @@ function physicsStep() {
     gl.uniform1i(uLoc.pos.pos, 0);
     gl.uniform1i(uLoc.pos.vel, 1);
     gl.uniform1i(uLoc.pos.tex, TEX);
+    gl.uniform1i(uLoc.pos.N,   numParticles);
     gl.uniform1f(uLoc.pos.dt,  DT);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -457,10 +555,10 @@ function physicsStep() {
 }
 
 // =============================================================
-//  RENDU DES PARTICULES
+//  RENDU
 // =============================================================
 
-var maxSpeed = 1.0;  // Adapté périodiquement via readback d'un pixel
+var maxSpeed = 1.0;
 
 function render() {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -470,7 +568,6 @@ function render() {
 
     gl.useProgram(renderProg);
     gl.bindVertexArray(renderVAO);
-
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, posTex[cur]);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, velTex[cur]);
     gl.uniform1i(uLoc.ren.pos, 0);
@@ -480,14 +577,14 @@ function render() {
     gl.uniform1f(uLoc.ren.max, maxSpeed);
     gl.uniformMatrix4fv(uLoc.ren.mvp, false, getMVP());
 
-    // Additive blending : les zones denses brillent davantage
+    // Additive blending : zones denses = plus lumineuses
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-    gl.drawArrays(gl.POINTS, 0, N);
+    gl.drawArrays(gl.POINTS, 0, numParticles);
     gl.disable(gl.BLEND);
 }
 
-// Readback d'un seul pixel pour estimer maxSpeed (1×1 = quasi instantané)
+// Readback d'un pixel pour estimer maxSpeed (coût négligeable : 1×1 pixel)
 function updateMaxSpeed() {
     var buf = new Float32Array(4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, velFBO[cur]);
@@ -495,6 +592,50 @@ function updateMaxSpeed() {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     if (buf[3] > 0) maxSpeed = Math.max(buf[3] * 1.5, maxSpeed * 0.98);
 }
+
+// =============================================================
+//  PANEL — sliders et bouton reset
+// =============================================================
+
+function linkSlider(inputId, displayId) {
+    var input = document.getElementById(inputId);
+    var disp  = document.getElementById(displayId);
+    input.addEventListener("input", function() {
+        disp.textContent = parseFloat(this.value).toFixed(1);
+    });
+}
+
+linkSlider("sMass", "vMass");
+linkSlider("sVx",   "vVx");
+linkSlider("sVy",   "vVy");
+linkSlider("sVz",   "vVz");
+
+var countNumEl  = document.getElementById("countNum");
+var countMaxEl  = document.getElementById("countMax");
+var countFillEl = document.getElementById("countFill");
+
+function updateCount() {
+    countNumEl.textContent  = numParticles;
+    countMaxEl.textContent  = MAX_N;
+    countFillEl.style.width = (numParticles / MAX_N * 100).toFixed(1) + "%";
+}
+updateCount();  // affichage initial
+
+document.getElementById("btnReset").addEventListener("click", function() {
+    var pd = initParticles();
+    numParticles = N;
+    cur = 0;
+
+    // Re-uploader les données initiales dans le buffer 0
+    gl.bindTexture(gl.TEXTURE_2D, posTex[0]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, TEX, TEX, 0, gl.RGBA, gl.FLOAT, pd.pos);
+    gl.bindTexture(gl.TEXTURE_2D, velTex[0]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, TEX, TEX, 0, gl.RGBA, gl.FLOAT, pd.vel);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+
+    maxSpeed = 1.0;
+    updateCount();
+});
 
 // =============================================================
 //  BOUCLE PRINCIPALE + HUD
@@ -514,17 +655,13 @@ function loop(t) {
     fpsCnt++;
     frame++;
 
-    // Mettre à jour maxSpeed toutes les 30 frames
     if (frame % 30 === 0) updateMaxSpeed();
 
-    // Mettre à jour l'affichage HUD chaque seconde
     if (t - fpsTimer >= 1000) {
         hud.textContent =
-            "N = " + N + "\n" +
-            "fps = " + fpsCnt + "\n" +
-            "TEX = " + TEX + "×" + TEX + "\n" +
-            "maxSpeed ≈ " + maxSpeed.toFixed(2);
-        fpsCnt  = 0;
+            fpsCnt + " fps\n" +
+            "TEX " + TEX + "×" + TEX;
+        fpsCnt   = 0;
         fpsTimer = t;
     }
 }
