@@ -380,7 +380,7 @@ var cam = { theta: 0.4, phi: 0.3, dist: 20.0 };
     window.addEventListener("mousemove", function(e) {
         if (!dragging) return;
         cam.theta -= (e.clientX - lastX) * 0.005;
-        cam.phi   -= (e.clientY - lastY) * 0.005;
+        cam.phi   += (e.clientY - lastY) * 0.005;
         cam.phi    = Math.max(-1.55, Math.min(1.55, cam.phi));
         lastX = e.clientX;
         lastY = e.clientY;
