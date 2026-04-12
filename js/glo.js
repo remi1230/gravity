@@ -237,6 +237,8 @@ var glo = {
 	cam_pose: 18,
 	modulation: 500,
 	var_masse: 5,
+	masse_particules_initiales: 0,
+	initial_particles_created: false,
 	nb_particules: 5,
 	masse_particules: 0.01,
 	ecart_particules: 1,

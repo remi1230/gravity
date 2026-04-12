@@ -895,6 +895,8 @@ function add_one_mesh(taille_mesh, taille = glo.taille_mesh, masse, pos,
 	else{
 		mesh.z_masse = masse.scale * scale_taille * div_masse;
 	}
+	mesh.scale_taille = scale_taille;
+	mesh.is_initial = !glo.initial_particles_created;
 	mesh.z_vitesse = 0.0;
 	mesh.z_acceleration = 0.0;
 	mesh.z_ax = 0.0; mesh.z_ay = 0.0; mesh.z_az = 0.0;
@@ -2086,6 +2088,7 @@ $("#renderCanvas").on('pointerup', function (e) {
 			add_meshes(glo.nb_particules, 0.2, glo.ecart_particules, {random: glo.mode.random, scale: glo.masse_particules, },
 			{x: glo.camera.getFrontPosition(glo.cam_dist).x, y: glo.camera.getFrontPosition(glo.cam_dist).y, z: glo.camera.getFrontPosition(glo.cam_dist).z, });
 		}
+		glo.initial_particles_created = true;
 	}
 	else if(side_of_click == "gauche"){
 
@@ -2272,6 +2275,11 @@ function raz_meshes(){
 	glo.camera.setTarget(BABYLON.Vector3.Zero());
 
 	meshes = [];
+
+	glo.initial_particles_created = false;
+	glo.masse_particules_initiales = 0;
+	var slider_initiales = glo.sliders_right.getSlider("masse_initiales");
+	if(slider_initiales){ slider_initiales.value = 0; }
 
 	glo.sliders_left.getSlider("masse_var").value = 5;
 	glo.sliders_left.getSlider("taille_var").value = 0;
