@@ -13,6 +13,8 @@ var SOFTENING  = 0.5;    // Adoucissement (évite la singularité à dist=0)
 var POINT_SIZE = 3.0;    // Taille des points en pixels
 var RADIUS     = 8.0;    // Rayon de la distribution initiale
 var INIT_SPEED = 0.0;    // Vitesse initiale (0 = au repos)
+var INIT_MASS  = 0.0;    // Masse dynamique des particules initiales (slider)
+var N_INITIAL  = N;      // Nombre de particules initiales (fixé au lancement)
 
 // =============================================================
 //  CANVAS + WEBGL 2
@@ -71,6 +73,8 @@ uniform int       uN;     // nombre de particules actives
 uniform float     uG;
 uniform float     uDT;
 uniform float     uSoft;
+uniform float     uInitMass;
+uniform int       uInitN;
 
 out vec4 outColor;
 
@@ -88,10 +92,11 @@ void main() {
         if (j == i)  continue;
         ivec2 jc   = ivec2(j % uTex, j / uTex);
         vec4  pj   = texelFetch(uPos, jc, 0);
+        float mj   = (j < uInitN) ? uInitMass : pj.w;
         vec3  d    = pj.xyz - p.xyz;
         float r2   = dot(d, d) + uSoft * uSoft;
         float inv  = inversesqrt(r2);
-        acc += d * pj.w * inv * inv * inv * uG;
+        acc += d * mj * inv * inv * inv * uG;
     }
 
     vec3 nv  = v.xyz + acc * uDT;
@@ -321,13 +326,15 @@ var renderVAO  = createEmptyVAO();
 
 var uLoc = {
     vel: {
-        pos:  gl.getUniformLocation(velProg, "uPos"),
-        vel:  gl.getUniformLocation(velProg, "uVel"),
-        tex:  gl.getUniformLocation(velProg, "uTex"),
-        N:    gl.getUniformLocation(velProg, "uN"),
-        G:    gl.getUniformLocation(velProg, "uG"),
-        dt:   gl.getUniformLocation(velProg, "uDT"),
-        soft: gl.getUniformLocation(velProg, "uSoft"),
+        pos:      gl.getUniformLocation(velProg, "uPos"),
+        vel:      gl.getUniformLocation(velProg, "uVel"),
+        tex:      gl.getUniformLocation(velProg, "uTex"),
+        N:        gl.getUniformLocation(velProg, "uN"),
+        G:        gl.getUniformLocation(velProg, "uG"),
+        dt:       gl.getUniformLocation(velProg, "uDT"),
+        soft:     gl.getUniformLocation(velProg, "uSoft"),
+        initMass: gl.getUniformLocation(velProg, "uInitMass"),
+        initN:    gl.getUniformLocation(velProg, "uInitN"),
     },
     pos: {
         pos:  gl.getUniformLocation(posProg, "uPos"),
@@ -535,6 +542,8 @@ function physicsStep() {
     gl.uniform1f(uLoc.vel.G,    G);
     gl.uniform1f(uLoc.vel.dt,   DT);
     gl.uniform1f(uLoc.vel.soft, SOFTENING);
+    gl.uniform1f(uLoc.vel.initMass, INIT_MASS);
+    gl.uniform1i(uLoc.vel.initN,    N_INITIAL);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
     // 2. Nouvelles positions → posTex[nxt]  (lit les vitesses fraîches)
@@ -609,6 +618,13 @@ linkSlider("sVx",   "vVx");
 linkSlider("sVy",   "vVy");
 linkSlider("sVz",   "vVz");
 
+var sInitMass = document.getElementById("sInitMass");
+var vInitMass = document.getElementById("vInitMass");
+sInitMass.addEventListener("input", function() {
+    INIT_MASS = parseFloat(this.value);
+    vInitMass.textContent = INIT_MASS.toFixed(1);
+});
+
 var countNumEl  = document.getElementById("countNum");
 var countMaxEl  = document.getElementById("countMax");
 var countFillEl = document.getElementById("countFill");
@@ -631,6 +647,10 @@ document.getElementById("btnReset").addEventListener("click", function() {
     gl.bindTexture(gl.TEXTURE_2D, velTex[0]);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, TEX, TEX, 0, gl.RGBA, gl.FLOAT, pd.vel);
     gl.bindTexture(gl.TEXTURE_2D, null);
+
+    INIT_MASS = 0.0;
+    sInitMass.value = 0;
+    vInitMass.textContent = "0.0";
 
     maxSpeed = 1.0;
     updateCount();
