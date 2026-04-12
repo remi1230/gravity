@@ -10,7 +10,8 @@ var MASS       = 0.0;    // Masse par défaut
 var G          = 1.0;    // Constante gravitationnelle
 var DT         = 0.016;  // Pas de temps
 var SOFTENING  = 0.5;    // Adoucissement (évite la singularité à dist=0)
-var POINT_SIZE = 3.0;    // Taille des points en pixels
+var POINT_SIZE = 3.0;    // Taille des points initiaux en pixels
+var POINT_SIZE_PLACED = 6.0; // Taille des points posés (2× les initiaux)
 var RADIUS     = 8.0;    // Rayon de la distribution initiale
 var INIT_SPEED = 0.0;    // Vitesse initiale (0 = au repos)
 var INIT_MASS  = 0.0;    // Masse dynamique des particules initiales (slider)
@@ -162,7 +163,9 @@ uniform sampler2D uPos;
 uniform sampler2D uVel;
 uniform mat4      uMVP;
 uniform int       uTex;
+uniform int       uInitN;
 uniform float     uPointSize;
+uniform float     uPointSizePlaced;
 
 out float vSpeed;
 
@@ -174,7 +177,7 @@ void main() {
 
     vSpeed       = v.w;
     gl_Position  = uMVP * vec4(p.xyz, 1.0);
-    gl_PointSize = uPointSize;
+    gl_PointSize = (i < uInitN) ? uPointSize : uPointSizePlaced;
 }`;
 
 // Fragment shader de rendu.
@@ -377,12 +380,14 @@ var uLoc = {
         ratio: gl.getUniformLocation(scaleProg, "uRatio"),
     },
     ren: {
-        pos:  gl.getUniformLocation(renderProg, "uPos"),
-        vel:  gl.getUniformLocation(renderProg, "uVel"),
-        mvp:  gl.getUniformLocation(renderProg, "uMVP"),
-        tex:  gl.getUniformLocation(renderProg, "uTex"),
-        ps:   gl.getUniformLocation(renderProg, "uPointSize"),
-        max:  gl.getUniformLocation(renderProg, "uMaxSpeed"),
+        pos:    gl.getUniformLocation(renderProg, "uPos"),
+        vel:    gl.getUniformLocation(renderProg, "uVel"),
+        mvp:    gl.getUniformLocation(renderProg, "uMVP"),
+        tex:    gl.getUniformLocation(renderProg, "uTex"),
+        initN:  gl.getUniformLocation(renderProg, "uInitN"),
+        ps:     gl.getUniformLocation(renderProg, "uPointSize"),
+        psP:    gl.getUniformLocation(renderProg, "uPointSizePlaced"),
+        max:    gl.getUniformLocation(renderProg, "uMaxSpeed"),
     }
 };
 
@@ -611,11 +616,13 @@ function render() {
     gl.bindVertexArray(renderVAO);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, posTex[cur]);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, velTex[cur]);
-    gl.uniform1i(uLoc.ren.pos, 0);
-    gl.uniform1i(uLoc.ren.vel, 1);
-    gl.uniform1i(uLoc.ren.tex, TEX);
-    gl.uniform1f(uLoc.ren.ps,  POINT_SIZE);
-    gl.uniform1f(uLoc.ren.max, maxSpeed);
+    gl.uniform1i(uLoc.ren.pos,   0);
+    gl.uniform1i(uLoc.ren.vel,   1);
+    gl.uniform1i(uLoc.ren.tex,   TEX);
+    gl.uniform1i(uLoc.ren.initN, N_INITIAL);
+    gl.uniform1f(uLoc.ren.ps,    POINT_SIZE);
+    gl.uniform1f(uLoc.ren.psP,   POINT_SIZE_PLACED);
+    gl.uniform1f(uLoc.ren.max,   maxSpeed);
     gl.uniformMatrix4fv(uLoc.ren.mvp, false, getMVP());
 
     // Additive blending : zones denses = plus lumineuses
@@ -697,6 +704,22 @@ sInitRadius.addEventListener("input", function() {
     vInitRadius.textContent = newScale.toFixed(2);
 });
 
+// --- Sliders taille des particules ---
+
+var sInitSize  = document.getElementById("sInitSize");
+var vInitSize  = document.getElementById("vInitSize");
+sInitSize.addEventListener("input", function() {
+    POINT_SIZE = parseFloat(this.value);
+    vInitSize.textContent = POINT_SIZE.toFixed(1);
+});
+
+var sPlacedSize = document.getElementById("sPlacedSize");
+var vPlacedSize = document.getElementById("vPlacedSize");
+sPlacedSize.addEventListener("input", function() {
+    POINT_SIZE_PLACED = parseFloat(this.value);
+    vPlacedSize.textContent = POINT_SIZE_PLACED.toFixed(1);
+});
+
 var countNumEl  = document.getElementById("countNum");
 var countMaxEl  = document.getElementById("countMax");
 var countFillEl = document.getElementById("countFill");
@@ -733,6 +756,14 @@ document.getElementById("btnReset").addEventListener("click", function() {
     prevScale = 1.0;
     sInitRadius.value = 1;
     vInitRadius.textContent = "1.00";
+
+    POINT_SIZE = 3.0;
+    sInitSize.value = 3;
+    vInitSize.textContent = "3.0";
+
+    POINT_SIZE_PLACED = 6.0;
+    sPlacedSize.value = 6;
+    vPlacedSize.textContent = "6.0";
 
     paused = false;
     btnPause.textContent = "⏸ Pause";
