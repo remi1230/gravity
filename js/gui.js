@@ -18,7 +18,6 @@ function add_gui_controls(sc){
 
   add_nb_particules_slider(sc);
   add_masse_posee_slider(sc);
-  add_masse_initiales_slider(sc);
   add_ecart_slider(sc);
   add_taille_mesh_slider(sc);
   add_cohesion_posee_slider(sc)
@@ -710,39 +709,6 @@ function add_masse_posee_slider(sc){
   slider.onValueChangedObservable.add(function (value) {
     glo.masse_particules = parseFloat(value / 100) * glo.echelle;
     header.text = "Masse des particules: " + parseInt(value) * glo.echelle;
-  });
-  panel.addControl(slider);
-
-  glo.headers.push(header);
-  glo.sliders_right.push(slider);
-  glo.panels_right.push(panel);
-}
-function add_masse_initiales_slider(sc){
-  var panel = new BABYLON.GUI.StackPanel();
-
-  glo.advancedTexture.addControl(panel);
-
-  var header = new BABYLON.GUI.TextBlock();
-  header.text = "Masse initiales: 0";
-  panel.addControl(header);
-
-  var slider = new BABYLON.GUI.Slider();
-  slider.name = 'masse_initiales';
-  slider.prop_value = 'masse_particules_initiales';
-  slider.echelle_value = 100;
-  slider.minimum = 0;
-  slider.maximum = 100;
-  slider.value = 0;
-  slider.onValueChangedObservable.add(function (value) {
-    var masse_scale = parseFloat(value / 100) * glo.echelle;
-    glo.masse_particules_initiales = masse_scale;
-    header.text = "Masse initiales: " + parseInt(value) * glo.echelle;
-    var div_masse = 0.001;
-    for (var i = 0; i < meshes.length; i++) {
-      if (meshes[i].is_initial) {
-        meshes[i].z_masse = masse_scale * (meshes[i].scale_taille || 1) * div_masse;
-      }
-    }
   });
   panel.addControl(slider);
 
