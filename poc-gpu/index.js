@@ -126,6 +126,31 @@ void main() {
     outColor = vec4(p.xyz + v.xyz * uDT, p.w);  // w = masse (inchangée)
 }`;
 
+// Scale radial des POSITIONS — passe unique déclenchée par le slider
+var SCALE_FS = `#version 300 es
+precision highp float;
+precision highp sampler2D;
+
+uniform sampler2D uPos;
+uniform int       uTex;
+uniform int       uN;
+uniform int       uInitN;
+uniform float     uRatio;
+
+out vec4 outColor;
+
+void main() {
+    ivec2 c = ivec2(gl_FragCoord.xy);
+    int   i = c.y * uTex + c.x;
+    vec4  p = texelFetch(uPos, c, 0);
+
+    if (i < uInitN && i < uN) {
+        outColor = vec4(p.xyz * uRatio, p.w);
+    } else {
+        outColor = p;
+    }
+}`;
+
 // Vertex shader de rendu.
 // gl_VertexID → index particule → lookup texelFetch dans uPos.
 // Aucun vertex buffer de positions nécessaire.
@@ -320,6 +345,7 @@ function initParticles() {
 
 var velProg    = createProgram(QUAD_VS, VEL_FS);
 var posProg    = createProgram(QUAD_VS, POS_FS);
+var scaleProg  = createProgram(QUAD_VS, SCALE_FS);
 var renderProg = createProgram(RENDER_VS, RENDER_FS);
 var quadVAO    = createQuadVAO();
 var renderVAO  = createEmptyVAO();
@@ -342,6 +368,13 @@ var uLoc = {
         tex:  gl.getUniformLocation(posProg, "uTex"),
         N:    gl.getUniformLocation(posProg, "uN"),
         dt:   gl.getUniformLocation(posProg, "uDT"),
+    },
+    scale: {
+        pos:   gl.getUniformLocation(scaleProg, "uPos"),
+        tex:   gl.getUniformLocation(scaleProg, "uTex"),
+        N:     gl.getUniformLocation(scaleProg, "uN"),
+        initN: gl.getUniformLocation(scaleProg, "uInitN"),
+        ratio: gl.getUniformLocation(scaleProg, "uRatio"),
     },
     ren: {
         pos:  gl.getUniformLocation(renderProg, "uPos"),
@@ -625,6 +658,45 @@ sInitMass.addEventListener("input", function() {
     vInitMass.textContent = INIT_MASS.toFixed(1);
 });
 
+// --- Slider rayon des particules initiales ---
+
+var prevScale   = 1.0;
+var sInitRadius = document.getElementById("sInitRadius");
+var vInitRadius = document.getElementById("vInitRadius");
+
+function applyScaleToInitial(ratio) {
+    var nxt = 1 - cur;
+
+    // Passe GPGPU : scale les positions initiales
+    gl.bindFramebuffer(gl.FRAMEBUFFER, posFBO[nxt]);
+    gl.viewport(0, 0, TEX, TEX);
+    gl.useProgram(scaleProg);
+    gl.bindVertexArray(quadVAO);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, posTex[cur]);
+    gl.uniform1i(uLoc.scale.pos,   0);
+    gl.uniform1i(uLoc.scale.tex,   TEX);
+    gl.uniform1i(uLoc.scale.N,     numParticles);
+    gl.uniform1i(uLoc.scale.initN, N_INITIAL);
+    gl.uniform1f(uLoc.scale.ratio, ratio);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+    // Copier le résultat dans posTex[cur] pour garder pos/vel synchronisés
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, posFBO[nxt]);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, posFBO[cur]);
+    gl.blitFramebuffer(0, 0, TEX, TEX, 0, 0, TEX, TEX, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+sInitRadius.addEventListener("input", function() {
+    var newScale = parseFloat(this.value);
+    if (prevScale > 0.001) {
+        applyScaleToInitial(newScale / prevScale);
+    }
+    prevScale = newScale;
+    vInitRadius.textContent = newScale.toFixed(2);
+});
+
 var countNumEl  = document.getElementById("countNum");
 var countMaxEl  = document.getElementById("countMax");
 var countFillEl = document.getElementById("countFill");
@@ -651,6 +723,10 @@ document.getElementById("btnReset").addEventListener("click", function() {
     INIT_MASS = 0.0;
     sInitMass.value = 0;
     vInitMass.textContent = "0.0";
+
+    prevScale = 1.0;
+    sInitRadius.value = 1;
+    vInitRadius.textContent = "1.00";
 
     maxSpeed = 1.0;
     updateCount();

@@ -139,6 +139,11 @@ input[type="range"]::-moz-range-thumb {
   cursor: pointer;
 }
 
+/* Slider Rayon : accent vert pour la distance */
+#sInitRadius::-webkit-slider-thumb { background: #42ff8c; }
+#sInitRadius::-webkit-slider-thumb:hover { background: #7affb0; }
+#sInitRadius::-moz-range-thumb { background: #42ff8c; }
+
 /* Slider Vx/Vy/Vz : accent différent pour les vitesses */
 #sVx::-webkit-slider-thumb,
 #sVy::-webkit-slider-thumb,
