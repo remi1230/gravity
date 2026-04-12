@@ -6,7 +6,7 @@
 
 var N          = 12000;    // Nombre de particules initiales
 var MAX_N      = 24000;   // Maximum total (borne fixe dans les shaders)
-var MASS       = 0.001;    // Masse par défaut
+var MASS       = 0.0;    // Masse par défaut
 var G          = 1.0;    // Constante gravitationnelle
 var DT         = 0.016;  // Pas de temps
 var SOFTENING  = 0.5;    // Adoucissement (évite la singularité à dist=0)
@@ -163,7 +163,6 @@ void main() {
     if (dot(uv, uv) > 1.0) discard;
 
     float t = clamp(vSpeed / max(uMaxSpeed, 0.001), 0.0, 1.0);
-    
     vec3 c;
     if      (t < 0.25) { float f = t * 4.0;        c = mix(vec3(0.0, 0.0, 1.0), vec3(0.0, 1.0, 1.0), f); }
     else if (t < 0.50) { float f = (t-0.25)*4.0;   c = mix(vec3(0.0, 1.0, 1.0), vec3(0.0, 1.0, 0.0), f); }
