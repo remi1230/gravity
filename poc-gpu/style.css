@@ -200,8 +200,9 @@ input[type="range"]::-moz-range-thumb {
 }
 
 /* ============================================================
-   Bouton reset
+   Boutons bas de panneau
    ============================================================ */
+#btnPause,
 #btnReset {
   margin: 0;
   padding: 12px 0;
@@ -217,11 +218,13 @@ input[type="range"]::-moz-range-thumb {
   width: 100%;
 }
 
+#btnPause:hover,
 #btnReset:hover {
   background: rgba(255, 255, 255, 0.04);
   color: rgba(255, 255, 255, 0.6);
 }
 
+#btnPause:active,
 #btnReset:active {
   background: rgba(255, 255, 255, 0.08);
 }

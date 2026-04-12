@@ -708,6 +708,12 @@ function updateCount() {
 }
 updateCount();  // affichage initial
 
+var btnPause = document.getElementById("btnPause");
+btnPause.addEventListener("click", function() {
+    paused = !paused;
+    btnPause.textContent = paused ? "▶ Reprendre" : "⏸ Pause";
+});
+
 document.getElementById("btnReset").addEventListener("click", function() {
     var pd = initParticles();
     numParticles = N;
@@ -728,6 +734,9 @@ document.getElementById("btnReset").addEventListener("click", function() {
     sInitRadius.value = 1;
     vInitRadius.textContent = "1.00";
 
+    paused = false;
+    btnPause.textContent = "⏸ Pause";
+
     maxSpeed = 1.0;
     updateCount();
 });
@@ -741,10 +750,12 @@ var fpsTimer = 0;
 var fpsCnt   = 0;
 var frame    = 0;
 
+var paused = false;
+
 function loop(t) {
     requestAnimationFrame(loop);
 
-    physicsStep();
+    if (!paused) physicsStep();
     render();
 
     fpsCnt++;
